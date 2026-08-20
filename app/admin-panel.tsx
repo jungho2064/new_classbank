@@ -59,19 +59,48 @@ export default function AdminPanel({
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
 
-  // 승인/거절
-  const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean) => {
-    if (!supabase) return;
-    await supabase.from('transactions').update({ status }).eq('id', tId);
-    if (status === 'Rejected') {
-      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  // 1. 송금/출금 대기열 승인 및 거절 핸들러
+const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
+  if (!supabase) return;
+
+  // 기존 신청 내역의 상태 변경
+  await supabase.from('transactions').update({ status }).eq('id', tId);
+
+  // 반려(거절) 처리 시
+  if (status === 'Rejected') {
+    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const refundAmt = Math.abs(Number(amount || 0));
+
+    // 출금 반려일 경우: 빠져나갔던 금액을 학생 계좌로 환불 입금(+refundAmt)
+    if (isWithdrawal && refundAmt > 0) {
       await supabase.from('transactions').insert([
-        { date: nowStr, name, type: isWithdrawal ? '출금 반려' : '송금 반려', amount: 0, note: '관리자 반려 처리', status: 'System' }
+        { 
+          date: nowStr, 
+          name, 
+          type: '출금 반려 환불', 
+          amount: refundAmt, 
+          note: '현금 출금 요청 반려로 인한 환불', 
+          status: 'Success' 
+        }
+      ]);
+    } else {
+      // 송금 반려 기록
+      await supabase.from('transactions').insert([
+        { 
+          date: nowStr, 
+          name, 
+          type: '송금 반려', 
+          amount: 0, 
+          note: '관리자 반려 처리', 
+          status: 'System' 
+        }
       ]);
     }
-    if (loadData) await loadData();
-    if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절'}] 처리되었습니다.`);
-  };
+  }
+
+  if (loadData) await loadData();
+  if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 및 환불'}] 처리되었습니다.`);
+};
 
   // 상/벌금 실행
   const handleRewardPenalty = async () => {
@@ -332,7 +361,7 @@ export default function AdminPanel({
                   <div><p className="font-bold">{t.name}</p><p className="text-slate-400">출금 요청: {Math.abs(t.amount)}안</p></div>
                   <div className="flex gap-2">
                     <button onClick={() => handleResolvePending(t.id, 'Success', t.name, true)} className="bg-emerald-600 px-3 py-1.5 rounded-lg font-bold">승인</button>
-                    <button onClick={() => handleResolvePending(t.id, 'Rejected', t.name, true)} className="bg-rose-600 px-3 py-1.5 rounded-lg font-bold">거절</button>
+                    <button onClick={() => handleResolvePending(t.id, 'Rejected', t.name, true, t.amount)} className="bg-rose-600 px-3 py-1.5 rounded-lg font-bold">거절 (환불)</button>
                   </div>
                 </div>
               ))}
