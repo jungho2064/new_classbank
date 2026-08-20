@@ -137,8 +137,14 @@ export default function AdminPanel({
         }
 
         const newLoan = Number(targetUser?.loan_balance || 0) + shortage;
-        await supabase.from('users').update({ loan_balance: newLoan, dunning: 'ON' }).eq('name', rewardTarget);
+const addWeeklyRepay = Math.ceil(shortage / 4); // 👈 50안이면 매주 13안씩 상환
+const newWeeklyRepay = Number(targetUser?.weekly_repay || 0) + addWeeklyRepay;
 
+await supabase.from('users').update({ 
+  loan_balance: newLoan, 
+  weekly_repay: newWeeklyRepay, 
+  dunning: 'ON' 
+}).eq('name', rewardTarget);
         setRewardAmt(''); setRewardReason('');
         if (loadData) await loadData();
         if (showAlert) showAlert(`⚠️ 잔액 부족! 모자란 ${shortage}안이 대출로 강제 전환되었습니다.`);
