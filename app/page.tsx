@@ -626,6 +626,145 @@ export default function App() {
               </button>
             </div>
           )}
+          {/* ========================================================= */}
+          {/* [1] 대출 발급 및 독촉 관리 탭 */}
+          {/* ========================================================= */}
+          {adminTab === 'loans' && (
+            <div className="space-y-4">
+              {/* 신규 대출 발급 폼 */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                <h3 className="font-bold text-sm text-indigo-400">🏦 신규 특례 대출 발급 (4주 분할 상환)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-400 mb-1">대출 대상 학생</label>
+                    <select 
+                      value={transferTarget} 
+                      onChange={e => setTransferTarget(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white"
+                    >
+                      <option value="">학생 선택</option>
+                      {userList.filter(u => u.status === 'Approved').map(u => (
+                        <option key={u.id} value={u.name}>{u.name} ({u.job})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">대출 원금 (안)</label>
+                    <input 
+                      type="number" 
+                      placeholder="예: 100" 
+                      value={transferAmt} 
+                      onChange={e => setTransferAmt(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white" 
+                    />
+                  </div>
+                </div>
+                <button 
+                  onClick={async () => {
+                    const amt = parseInt(transferAmt);
+                    if (!transferTarget || isNaN(amt) || amt <= 0) {
+                      showAlert('⚠️ 대상 학생과 대출 금액을 확인하세요.');
+                      return;
+                    }
+                    const targetUser = userList.find(u => u.name === transferTarget);
+                    const newLoan = Number(targetUser.loan_balance || 0) + amt;
+                    const newWeekly = Math.ceil(amt / 4);
+
+                    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                    await supabase!.from('transactions').insert([
+                      { date: nowStr, name: transferTarget, type: '특례 대출 입금', amount: amt, note: '4주 분할 상환 대출', status: 'Success' }
+                    ]);
+                    await supabase!.from('users').update({ 
+                      loan_balance: newLoan, 
+                      weekly_repay: Number(targetUser.weekly_repay || 0) + newWeekly 
+                    }).eq('name', transferTarget);
+
+                    setTransferAmt('');
+                    await loadData();
+                    showAlert(`✅ ${transferTarget} 학생에게 ${amt}안 대출을 지급했습니다!`);
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs shadow-lg transition"
+                >
+                  대출 실행 및 학생 계좌에 입금
+                </button>
+              </div>
+
+              {/* 연체 독촉장 관리 */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                <h3 className="font-bold text-sm text-rose-400">🚨 대출자 목록 및 독촉장 제어</h3>
+                {userList.filter(u => Number(u.loan_balance) > 0).length === 0 ? (
+                  <p className="text-xs text-slate-500 py-3 text-center">현재 대출 잔액이 있는 학생이 없습니다.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {userList.filter(u => Number(u.loan_balance) > 0).map(u => (
+                      <div key={u.id} className="bg-slate-950 p-3.5 rounded-xl flex justify-between items-center border border-slate-800 text-xs">
+                        <div>
+                          <p className="font-bold text-white">{u.name} ({u.job})</p>
+                          <p className="text-rose-400 font-bold">대출 잔액: {u.loan_balance} 안</p>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                            const newDun = u.dunning === 'ON' ? '' : 'ON';
+                            await supabase!.from('users').update({ dunning: newDun }).eq('id', u.id);
+                            await loadData();
+                            showAlert(`${u.name} 대원의 독촉장을 [${newDun ? '활성화' : '해제'}] 했습니다.`);
+                          }}
+                          className={`px-3.5 py-2 rounded-xl font-bold transition ${u.dunning === 'ON' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+                        >
+                          {u.dunning === 'ON' ? '🚨 독촉장 켜짐' : '📢 독촉장 발송'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* [2] 방학 동결 및 점검 모드 제어 탭 */}
+          {/* ========================================================= */}
+          {adminTab === 'freeze' && (
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="font-bold text-sm text-indigo-400">⚙️ 학급 경제 특수 운영 모드</h3>
+              
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-sm text-white">❄️ 방학(경제 동결) 모드</p>
+                  <p className="text-xs text-slate-400 mt-0.5">학생들의 송금, 신규 구매, 예금 개설을 잠그고 조회 및 대출 상환만 허용합니다.</p>
+                </div>
+                <button 
+                  onClick={async () => {
+                    const nextVal = isFrozen ? 'FALSE' : 'TRUE';
+                    await supabase!.from('system_config').upsert({ key: 'is_vacation', value: nextVal });
+                    await loadData();
+                    showAlert(isFrozen ? '☀️ 방학 모드가 해제되었습니다.' : '❄️ 방학 모드가 가동되었습니다.');
+                  }}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs transition ${isFrozen ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+                >
+                  {isFrozen ? '동결 중 (ON)' : '해제됨 (OFF)'}
+                </button>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-sm text-white">🏦 정기예금 신규 가입 창구</p>
+                  <p className="text-xs text-slate-400 mt-0.5">학생들이 정기예금 상품에 신규 가입할 수 있도록 창구를 엽니다.</p>
+                </div>
+                <button 
+                  onClick={async () => {
+                    const nextVal = depositOpen ? 'FALSE' : 'TRUE';
+                    await supabase!.from('system_config').upsert({ key: 'deposit_open', value: nextVal });
+                    await loadData();
+                    showAlert(depositOpen ? '🔒 예금 창구가 닫혔습니다.' : '🟢 예금 창구가 열렸습니다.');
+                  }}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs transition ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+                >
+                  {depositOpen ? '창구 열림 (ON)' : '창구 닫힘 (OFF)'}
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     );
