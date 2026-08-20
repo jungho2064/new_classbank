@@ -107,6 +107,33 @@ export default function AdminPanel({
     if (!supabase) return;
     const amt = parseInt(rewardAmt);
     if (!rewardTarget || isNaN(amt) || amt <= 0) { if (showAlert) showAlert('⚠️ 대상과 금액을 확인하세요.'); return; }
+    if (rewardType === '벌금(-)') {
+      const targetBalance = safeTrans
+        .filter((t: any) => t && t.name === rewardTarget && t.status !== 'Rejected' && t.status !== 'Deposit_Active')
+        .reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
+
+      if (targetBalance < amt) {
+        const shortage = amt - targetBalance; // 부족한 금액
+        const targetUser = safeUsers.find((u: any) => u.name === rewardTarget);
+        
+        // 1. 잔액만큼만 벌금 징수 (잔액 0원 처리)
+        if (targetBalance > 0) {
+          await supabase.from('transactions').insert([
+            { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: -targetBalance, note: `${rewardReason} (잔액 전액 징수)`, status: 'Success' },
+            { date: nowStr, name: '국고(중앙은행)', type: '벌금 수입', amount: targetBalance, note: `${rewardTarget} 벌금`, status: 'Success' }
+          ]);
+        }
+        
+        // 2. 모자란 돈은 대출 잔액으로 자동 전환
+        const newLoan = Number(targetUser.loan_balance || 0) + shortage;
+        await supabase.from('users').update({ loan_balance: newLoan, dunning: 'ON' }).eq('name', rewardTarget);
+        
+        setRewardAmt(''); setRewardReason('');
+        if (loadData) await loadData();
+        if (showAlert) showAlert(`⚠️ 잔액 부족으로 ${targetBalance}안 징수 후 모자란 ${shortage}안은 대출로 전환되었습니다.`);
+        return;
+      }
+    }
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     const isReward = rewardType === '상금(+)';
     const val = isReward ? amt : -amt;
