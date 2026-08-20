@@ -266,7 +266,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4 relative">
         {alertMsg && (
-          <div className="fixed top-6 left-0 right-0 max-w-xs mx-auto z-50 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
+          <div className="fixed top-6 left-0 right-0 max-w-xs mx-auto z-9999 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
             {alertMsg}
           </div>
         )}
@@ -329,7 +329,7 @@ const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((a, 
   return (
     <div className="max-w-md mx-auto bg-slate-950 min-h-screen shadow-2xl pb-28 text-white relative">
       {alertMsg && (
-        <div className="fixed top-4 left-0 right-0 max-w-xs mx-auto z-50 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
+        <div className="fixed top-4 left-0 right-0 max-w-xs mx-auto z-9999 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
           {alertMsg}
         </div>
       )}
