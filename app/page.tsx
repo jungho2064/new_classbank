@@ -47,7 +47,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
 
   // 학생 탭
-  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'deposit' | 'loan' | 'store' | 'bag'>('wallet');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'settings' | 'store' | 'bag'>('wallet');
   const [adminTab, setAdminTab] = useState<'students' | 'salary' | 'loans' | 'estate' | 'freeze'>('students');
 
   // 송금 및 예금 입력 폼
@@ -697,6 +697,15 @@ export default function App() {
               <button onClick={() => setActiveTab('loan')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2 transition">
                 <AlertTriangle size={20} className={currentUser.loan_balance > 0 ? "text-rose-400" : "text-slate-400"} /> 대출상환
               </button>
+              <button onClick={() => setActiveTab('withdraw')} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2">
+                <Receipt size={20} className="text-indigo-400" /> 현금출금
+              </button>
+              <button onClick={() => setActiveTab('payslip')} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2">
+                <FileText size={20} className="text-indigo-400" /> 명세서
+              </button>
+              <button onClick={() => setActiveTab('settings')} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2">
+                <Settings size={20} className="text-slate-400" /> 비번설정
+              </button>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
@@ -812,7 +821,110 @@ export default function App() {
             <button onClick={handleLoanRepay} className="w-full bg-rose-600 hover:bg-rose-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">상환하기</button>
           </div>
         )}
-
+        {activeTab === 'payslip' && (
+  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+    <h2 className="font-bold text-indigo-400 text-sm flex items-center gap-2">
+      <FileText size={16} /> 주급 및 거주비 명세서
+    </h2>
+    <div className="space-y-2">
+      {myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').length === 0 ? (
+        <p className="text-xs text-slate-500 py-4 text-center">발급된 명세서가 없습니다.</p>
+      ) : (
+        myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').map(t => (
+          <div key={t.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1">
+            <div className="flex justify-between font-bold">
+              <span className={t.type === '주급' ? 'text-emerald-400' : 'text-rose-400'}>
+                {t.type === '주급' ? '💵 주급 지급 명세서' : '🏠 좌석 임대료 납부서'}
+              </span>
+              <span>{t.amount > 0 ? `+${t.amount}` : t.amount} 안</span>
+            </div>
+            <p className="text-slate-400 text-[11px]">{t.note}</p>
+            <p className="text-slate-500 text-[10px]">{t.date}</p>
+          </div>
+        ))
+      )}
+    </div>
+  </div>
+)}
+        {activeTab === 'payslip' && (
+  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+    <h2 className="font-bold text-indigo-400 text-sm flex items-center gap-2">
+      <FileText size={16} /> 주급 및 거주비 명세서
+    </h2>
+    <div className="space-y-2">
+      {myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').length === 0 ? (
+        <p className="text-xs text-slate-500 py-4 text-center">발급된 명세서가 없습니다.</p>
+      ) : (
+        myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').map(t => (
+          <div key={t.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1">
+            <div className="flex justify-between font-bold">
+              <span className={t.type === '주급' ? 'text-emerald-400' : 'text-rose-400'}>
+                {t.type === '주급' ? '💵 주급 지급 명세서' : '🏠 좌석 임대료 납부서'}
+              </span>
+              <span>{t.amount > 0 ? `+${t.amount}` : t.amount} 안</span>
+            </div>
+            <p className="text-slate-400 text-[11px]">{t.note}</p>
+            <p className="text-slate-500 text-[10px]">{t.date}</p>
+          </div>
+        ))
+      )}
+    </div>
+  </div>
+)}
+{activeTab === 'payslip' && (
+  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+    <h2 className="font-bold text-indigo-400 text-sm flex items-center gap-2">
+      <FileText size={16} /> 주급 및 거주비 명세서
+    </h2>
+    <div className="space-y-2">
+      {myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').length === 0 ? (
+        <p className="text-xs text-slate-500 py-4 text-center">발급된 명세서가 없습니다.</p>
+      ) : (
+        myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').map(t => (
+          <div key={t.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1">
+            <div className="flex justify-between font-bold">
+              <span className={t.type === '주급' ? 'text-emerald-400' : 'text-rose-400'}>
+                {t.type === '주급' ? '💵 주급 지급 명세서' : '🏠 좌석 임대료 납부서'}
+              </span>
+              <span>{t.amount > 0 ? `+${t.amount}` : t.amount} 안</span>
+            </div>
+            <p className="text-slate-400 text-[11px]">{t.note}</p>
+            <p className="text-slate-500 text-[10px]">{t.date}</p>
+          </div>
+        ))
+      )}
+    </div>
+  </div>
+)}
+        {activeTab === 'settings' && (
+  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+    <h2 className="font-bold text-slate-300 text-sm flex items-center gap-2">
+      <Settings size={16} /> 비밀번호 관리
+    </h2>
+    <div className="space-y-2 text-xs">
+      <label className="block text-slate-400">새 로그인 비밀번호</label>
+      <input 
+        type="password" 
+        placeholder="변경할 새 비밀번호" 
+        value={repayPw} 
+        onChange={e => setRepayPw(e.target.value)} 
+        className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white" 
+      />
+    </div>
+    <button 
+      onClick={async () => {
+        if (!repayPw.trim()) { showAlert('⚠️ 새 비밀번호를 입력해주세요.'); return; }
+        await supabase!.from('users').update({ password: repayPw.trim() }).eq('name', currentUser.name);
+        setRepayPw(''); setActiveTab('wallet');
+        await loadData();
+        showAlert('🔒 로그인 비밀번호가 성공적으로 변경되었습니다!');
+      }} 
+      className="w-full bg-slate-800 hover:bg-slate-700 py-3.5 rounded-xl font-bold text-xs border border-slate-700"
+    >
+      비밀번호 변경 저장
+    </button>
+  </div>
+)}
         {/* [상점 탭] */}
         {activeTab === 'store' && (
           <div className="space-y-3">
