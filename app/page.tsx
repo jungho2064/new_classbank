@@ -164,6 +164,7 @@ export default function App() {
 
   const handleDeposit = async () => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 예금 가입이 불가합니다.'); return; }
+    if (!depositOpen) { showAlert('🔒 현재 정기예금 가입 창구가 닫혀 있습니다.'); return; }
     const amt = parseInt(depositAmt);
     if (isNaN(amt) || amt < 10) { showAlert('⚠️ 최소 10안 이상부터 가능합니다.'); return; }
     const days = depositType === 'short' ? 7 : 28;
@@ -349,6 +350,14 @@ export default function App() {
         {activeTab === 'deposit' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
             <div className="flex justify-between items-center"><h2 className="font-bold text-yellow-400 text-sm">정기예금 센터</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            {!depositOpen ? (
+          <div className="p-6 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
+            <p className="text-2xl">🔒</p>
+            <p className="text-sm font-bold text-slate-300">현재 예금 신규 가입 창구가 닫혀 있습니다.</p>
+            <p className="text-xs text-slate-500">선생님이 예금 가입 기간을 오픈할 때까지 기다려주세요.</p>
+          </div>
+        ) : (
+          <>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setDepositType('short')} className={`p-3 rounded-xl border font-bold ${depositType === 'short' ? 'bg-indigo-600/30 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>단기 (7일, 3%)</button>
               <button onClick={() => setDepositType('long')} className={`p-3 rounded-xl border font-bold ${depositType === 'long' ? 'bg-indigo-600/30 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>장기 (28일, 15%)</button>
