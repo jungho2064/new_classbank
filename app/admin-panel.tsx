@@ -103,10 +103,15 @@ export default function AdminPanel({
   };
 
   // 상/벌금 실행
+  // 상/벌금 실행
   const handleRewardPenalty = async () => {
     if (!supabase) return;
     const amt = parseInt(rewardAmt);
     if (!rewardTarget || isNaN(amt) || amt <= 0) { if (showAlert) showAlert('⚠️ 대상과 금액을 확인하세요.'); return; }
+
+    // 💡 시간을 계산하는 코드를 맨 위로 올렸습니다!
+    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+
     if (rewardType === '벌금(-)') {
       const targetBalance = safeTrans
         .filter((t: any) => t && t.name === rewardTarget && t.status !== 'Rejected' && t.status !== 'Deposit_Active')
@@ -134,7 +139,8 @@ export default function AdminPanel({
         return;
       }
     }
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    
+    // 정상적으로 잔액이 충분하거나 상금일 때
     const isReward = rewardType === '상금(+)';
     const val = isReward ? amt : -amt;
 
