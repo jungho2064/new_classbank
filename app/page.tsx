@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Wallet, Store, QrCode, TrendingUp, Settings, ShieldCheck, 
-  ArrowRightLeft, Landmark, FileText, Sparkles, AlertTriangle, 
-  CheckCircle, XCircle, RefreshCw, LogOut, Lock, User, 
-  UserPlus, Camera, Receipt, Clock, Info, KeyRound, ChevronLeft
+  ArrowRightLeft, Landmark, FileText, AlertTriangle, 
+  User, UserPlus, Receipt, LogOut, ChevronLeft
 } from 'lucide-react';
+import AdminPanel from './admin-panel';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -15,40 +15,30 @@ const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supaba
 
 export default function App() {
   const [lang, setLang] = useState<'ko' | 'ru'>('ko');
-  const t = (ko: string, ru: string) => (lang === 'ru' ? ru : ko);
-
-  // 모드 상태: 'None' | 'Student' | 'Admin'
   const [loginMode, setLoginMode] = useState<'None' | 'Student' | 'Admin'>('None');
-
-  // 모달 팝업 상태
   const [showSignupModal, setShowSignupModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
 
-  // 로그인 폼 상태
   const [loginName, setLoginName] = useState('');
   const [loginPw, setLoginPw] = useState('');
   const [adminPwInput, setAdminPwInput] = useState('');
 
-  // 회원가입 폼 상태
   const [regName, setRegName] = useState('');
   const [regPw, setRegPw] = useState('');
   const [regTransferPw, setRegTransferPw] = useState('');
 
-  // 실시간 데이터 상태
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userList, setUserList] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [shopItems, setShopItems] = useState<any[]>([]);
   const [bagItems, setBagItems] = useState<any[]>([]);
+  const [seats, setSeats] = useState<any[]>([]);
+  const [fundData, setFundData] = useState<any>(null);
   const [isFrozen, setIsFrozen] = useState(false);
-  const [depositOpen, setDepositOpen] = useState(true);
   const [notice, setNotice] = useState('');
 
-  // 학생 탭: 'wallet' (홈), 'transfer', 'withdraw', 'deposit', 'loan', 'payslip', 'settings', 'store', 'bag'
-  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'settings' | 'store' | 'bag'>('wallet');
-  const [adminTab, setAdminTab] = useState<'students' | 'salary' | 'loans' | 'freeze'>('students');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'settings' | 'store' | 'bag' | 'fund'>('wallet');
 
-  // 입력 폼 상태들
   const [transferTarget, setTransferTarget] = useState('');
   const [transferAmt, setTransferAmt] = useState('');
   const [transferPw, setTransferPw] = useState('');
@@ -62,10 +52,8 @@ export default function App() {
 
   const [repayAmt, setRepayAmt] = useState('');
   const [repayPw, setRepayPw] = useState('');
-
   const [newLoginPw, setNewLoginPw] = useState('');
 
-  // 알림 팝업 및 QR 모달
   const [selectedQr, setSelectedQr] = useState<any>(null);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
@@ -74,9 +62,6 @@ export default function App() {
     setTimeout(() => setAlertMsg(null), 3500);
   };
 
-  // -------------------------------------------------------------
-  // DB 데이터 동기화
-  // -------------------------------------------------------------
   const loadData = async () => {
     if (!supabase) return;
     try {
@@ -88,18 +73,22 @@ export default function App() {
           if (updated) setCurrentUser(updated);
         }
       }
-
       const { data: trans } = await supabase.from('transactions').select('*').order('id', { ascending: false });
       if (trans) setTransactions(trans);
 
       const { data: shop } = await supabase.from('shop_items').select('*').eq('status', 'Active');
       if (shop) setShopItems(shop);
 
+      const { data: estate } = await supabase.from('real_estate').select('*').order('seat', { ascending: true });
+      if (estate) setSeats(estate);
+
+      const { data: funds } = await supabase.from('funds').select('*').limit(1).single();
+      if (funds) setFundData(funds);
+
       const { data: configs } = await supabase.from('system_config').select('*');
       if (configs) {
         const vMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
         setIsFrozen(vMap.is_vacation === 'TRUE');
-        setDepositOpen(vMap.deposit_open !== 'FALSE');
         setNotice(vMap.maintenance_notice || '');
       }
     } catch (e) {
@@ -113,427 +102,167 @@ export default function App() {
     if (data) setBagItems(data);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  // -------------------------------------------------------------
-  // [인증 1] 학생 로그인
-  // -------------------------------------------------------------
   const handleStudentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) {
-      showAlert('⚠️ Supabase 연결 설정이 필요합니다.');
-      return;
-    }
-    if (!loginName.trim() || !loginPw.trim()) {
-      showAlert('⚠️ 이름과 비밀번호를 입력해주세요.');
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('name', loginName.trim())
-      .eq('password', loginPw.trim())
-      .single();
-
-    if (error || !data) {
-      showAlert('❌ 대원 이름 또는 비밀번호가 틀렸습니다.');
-      return;
-    }
-
-    if (data.status === 'Pending') {
-      showAlert('⏳ 선생님의 가입 승인 대기 중입니다.');
-      return;
-    }
-
+    if (!loginName.trim() || !loginPw.trim()) { showAlert('⚠️ 이름과 비밀번호를 입력해주세요.'); return; }
+    const { data, error } = await supabase!.from('users').select('*').eq('name', loginName.trim()).eq('password', loginPw.trim()).single();
+    if (error || !data) { showAlert('❌ 대원 이름 또는 비밀번호가 틀렸습니다.'); return; }
+    if (data.status === 'Pending') { showAlert('⏳ 선생님의 승인을 기다리고 있습니다.'); return; }
     setCurrentUser(data);
     setLoginMode('Student');
     loadBag(data.name);
-    showAlert(`🚀 ${data.name} 대원, 정상 접속되었습니다!`);
+    showAlert(`🚀 ${data.name} 대원 환영합니다!`);
   };
 
-  // -------------------------------------------------------------
-  // [인증 2] 학생 회원가입 신청
-  // -------------------------------------------------------------
   const handleStudentSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
-    if (!regName.trim() || !regPw.trim()) {
-      showAlert('⚠️ 이름과 비밀번호를 모두 입력해주세요.');
-      return;
-    }
-
-    const tpw = regTransferPw.trim() || regPw.trim();
-
-    const { data: existing } = await supabase.from('users').select('name').eq('name', regName.trim()).single();
-    if (existing) {
-      showAlert('⚠️ 이미 등록되어 있는 이름입니다.');
-      return;
-    }
-
-    const { error } = await supabase.from('users').insert([
-      {
-        name: regName.trim(),
-        password: regPw.trim(),
-        transfer_password: tpw,
-        status: 'Pending',
-        job: '우주 시민',
-        loan_balance: 0,
-        weekly_repay: 0
-      }
-    ]);
-
+    if (!regName.trim() || !regPw.trim()) { showAlert('⚠️ 필수 정보를 입력해주세요.'); return; }
+    const { error } = await supabase!.from('users').insert([{
+      name: regName.trim(), password: regPw.trim(), transfer_password: regTransferPw.trim() || regPw.trim(),
+      status: 'Pending', job: '우주 시민', loan_balance: 0, weekly_repay: 0
+    }]);
     if (!error) {
       showAlert('🎉 가입 신청 완료! 선생님의 승인 후 로그인하세요.');
-      setRegName(''); setRegPw(''); setRegTransferPw('');
       setShowSignupModal(false);
       loadData();
-    } else {
-      showAlert('❌ 가입 처리 중 오류가 발생했습니다.');
-    }
+    } else showAlert('⚠️ 이미 존재하는 이름입니다.');
   };
 
-  // -------------------------------------------------------------
-  // [인증 3] 관리자 로그인
-  // -------------------------------------------------------------
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminPwInput.trim() === 'admin1234' || adminPwInput.trim() === '1234') {
-      setLoginMode('Admin');
-      setShowAdminModal(false);
-      setAdminPwInput('');
-      showAlert('👨‍🏫 관리자 관제 센터에 접속했습니다.');
-    } else {
-      showAlert('🔒 관리자 비밀번호가 일치하지 않습니다.');
-    }
-  };
-
-  // -------------------------------------------------------------
-  // [기능 1] 송금
-  // -------------------------------------------------------------
   const handleTransfer = async () => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 송금이 불가합니다.'); return; }
     const amt = parseInt(transferAmt);
-    if (isNaN(amt) || amt <= 0 || !transferTarget) { showAlert('⚠️ 수신인과 금액을 확인해주세요.'); return; }
-
-    const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
-    const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((acc, cur) => acc + Number(cur.amount), 0);
+    if (!transferTarget || isNaN(amt) || amt <= 0) { showAlert('⚠️ 정보를 확인해주세요.'); return; }
+    const myBalance = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected' && t.status !== 'Deposit_Active').reduce((a, c) => a + Number(c.amount), 0);
     const fee = myBalance >= 1000 ? 0 : 1;
-
-    if (myBalance < amt + fee) { showAlert('⚠️ 보유 잔액이 부족합니다.'); return; }
-    if (transferPw !== currentUser.transfer_password) { showAlert('❌ 송금 2차 비밀번호가 일치하지 않습니다.'); return; }
+    if (myBalance < amt + fee) { showAlert('⚠️ 잔액이 부족합니다.'); return; }
+    if (transferPw !== currentUser.transfer_password) { showAlert('❌ 2차 비밀번호가 틀렸습니다.'); return; }
 
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     const rows = [
       { date: nowStr, name: currentUser.name, type: '송금(출금)', amount: -amt, note: `${transferTarget} 송금`, status: 'Success' },
       { date: nowStr, name: transferTarget, type: '송금(입금)', amount: amt, note: `${currentUser.name} 입금`, status: 'Success' }
     ];
-
-    if (fee > 0) {
-      rows.push(
-        { date: nowStr, name: currentUser.name, type: '송금 수수료', amount: -fee, note: '타행 송금 수수료', status: 'Success' },
-        { date: nowStr, name: '국고(중앙은행)', type: '수수료 수입', amount: fee, note: `${currentUser.name} 송금 수수료`, status: 'Success' }
-      );
-    }
-
+    if (fee > 0) rows.push({ date: nowStr, name: currentUser.name, type: '송금 수수료', amount: -fee, note: '타행 송금 수수료', status: 'Success' });
     await supabase!.from('transactions').insert(rows);
     setTransferAmt(''); setTransferPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert(`💸 ${transferTarget} 대원에게 ${amt}안을 성공적으로 송금했습니다!`);
+    showAlert(`💸 ${transferTarget} 대원에게 ${amt}안 송금 완료!`);
   };
 
-  // -------------------------------------------------------------
-  // [기능 2] 현금 출금 사전 신청
-  // -------------------------------------------------------------
   const handleWithdraw = async () => {
     const amt = parseInt(withdrawAmt);
-    if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 출금할 금액을 입력해주세요.'); return; }
-
-    const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
-    const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((acc, cur) => acc + Number(cur.amount), 0);
-    if (myBalance < amt) { showAlert('⚠️ 잔액이 부족합니다.'); return; }
-
-    if (withdrawPw !== currentUser.transfer_password) { showAlert('❌ 비밀번호가 일치하지 않습니다.'); return; }
-
+    if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 금액을 확인하세요.'); return; }
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await supabase!.from('transactions').insert([
-      { date: nowStr, name: currentUser.name, type: '현금 출금', amount: -amt, note: '출금 사전 신청', status: 'Pending_W' }
-    ]);
-
+    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser.name, type: '현금 출금', amount: -amt, note: '사전 신청', status: 'Pending_W' }]);
     setWithdrawAmt(''); setWithdrawPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert('🏧 출금 신청이 접수되었습니다! 선생님의 확인 후 지급됩니다.');
+    showAlert('🏧 출금 신청 접수 완료!');
   };
 
-  // -------------------------------------------------------------
-  // [기능 3] 정기예금 가입
-  // -------------------------------------------------------------
   const handleDeposit = async () => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 예금 가입이 불가합니다.'); return; }
-    if (!depositOpen) { showAlert('🏦 현재 예금 가입 기간이 아닙니다.'); return; }
-
     const amt = parseInt(depositAmt);
-    if (isNaN(amt) || amt < 10) { showAlert('⚠️ 최소 10안 이상부터 예금 가능합니다.'); return; }
-
-    const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
-    const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((acc, cur) => acc + Number(cur.amount), 0);
-    if (myBalance < amt) { showAlert('⚠️ 통장 잔액이 부족합니다.'); return; }
-
-    if (depositPw !== currentUser.transfer_password) { showAlert('❌ 결제용 비밀번호가 일치하지 않습니다.'); return; }
-
+    if (isNaN(amt) || amt < 10) { showAlert('⚠️ 최소 10안 이상부터 가능합니다.'); return; }
     const days = depositType === 'short' ? 7 : 28;
     const rate = depositType === 'short' ? 3 : 15;
-    const now = new Date();
-    const expiryDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const nowStr = now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-
-    await supabase!.from('transactions').insert([
-      {
-        date: nowStr,
-        name: currentUser.name,
-        type: '예금 가입',
-        amount: -amt,
-        note: `만기:${expiryDate}|이율:${rate}|원금:${amt}`,
-        status: 'Deposit_Active'
-      }
-    ]);
-
+    const expiry = new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
+    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser.name, type: '예금 가입', amount: -amt, note: `만기:${expiry}|이율:${rate}|원금:${amt}`, status: 'Deposit_Active' }]);
     setDepositAmt(''); setDepositPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert(`🏦 ${amt}안이 정기예금(${rate}%)에 예치되었습니다! (만기일: ${expiryDate})`);
+    showAlert(`🏦 정기예금(${rate}%) 가입 완료!`);
   };
 
-  // -------------------------------------------------------------
-  // [기능 4] 대출 자진 상환
-  // -------------------------------------------------------------
   const handleLoanRepay = async () => {
     const amt = parseInt(repayAmt);
-    if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 올바른 금액을 입력하세요.'); return; }
-
-    const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
-    const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((acc, cur) => acc + Number(cur.amount), 0);
-    if (myBalance < amt) { showAlert('⚠️ 통장 잔액이 부족합니다.'); return; }
-
-    if (repayPw !== currentUser.transfer_password) { showAlert('❌ 결제용 비밀번호가 일치하지 않습니다.'); return; }
-
+    if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 금액을 확인하세요.'); return; }
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await supabase!.from('transactions').insert([
-      { date: nowStr, name: currentUser.name, type: '자진 대출 상환', amount: -amt, note: '학생 직접 상환', status: 'Success' },
-      { date: nowStr, name: '국고(중앙은행)', type: '대출금 회수', amount: amt, note: `${currentUser.name} 상환`, status: 'Success' }
-    ]);
-
-    const newLoan = Math.max(0, currentUser.loan_balance - amt);
-    await supabase!.from('users').update({ loan_balance: newLoan, dunning: newLoan === 0 ? '' : currentUser.dunning }).eq('name', currentUser.name);
-
+    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser.name, type: '자진 대출 상환', amount: -amt, note: '직접 상환', status: 'Success' }]);
+    const nextLoan = Math.max(0, currentUser.loan_balance - amt);
+    await supabase!.from('users').update({ loan_balance: nextLoan, dunning: nextLoan === 0 ? '' : currentUser.dunning }).eq('name', currentUser.name);
     setRepayAmt(''); setRepayPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert(`💸 ${amt}안 대출 상환이 처리되었습니다!`);
+    showAlert(`💸 ${amt}안 대출 상환 완료!`);
   };
 
-  // -------------------------------------------------------------
-  // [기능 5] 비밀번호 변경
-  // -------------------------------------------------------------
-  const handleChangePassword = async () => {
-    if (!newLoginPw.trim()) { showAlert('⚠️ 새 비밀번호를 입력해주세요.'); return; }
-    await supabase!.from('users').update({ password: newLoginPw.trim() }).eq('name', currentUser.name);
-    setNewLoginPw(''); setActiveTab('wallet');
-    await loadData();
-    showAlert('🔒 로그인 비밀번호가 성공적으로 변경되었습니다!');
-  };
-
-  // -------------------------------------------------------------
-  // [기능 6] 상점 아이템 구매
-  // -------------------------------------------------------------
   const handleBuyItem = async (item: any) => {
-    if (isFrozen) { showAlert('❄️ 방학 중에는 상점 이용이 불가합니다.'); return; }
-    if (item.stock <= 0) { showAlert('⚠️ 재고가 모두 소진되었습니다.'); return; }
-
-    const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
-    const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((acc, cur) => acc + Number(cur.amount), 0);
-    if (myBalance < item.price) { showAlert('⚠️ 통장 잔액이 부족합니다.'); return; }
-
-    const now = new Date();
-    const nowStr = now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const expiryStr = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const serialCode = 'SN-' + Math.floor(100000 + Math.random() * 900000);
-
-    await supabase!.from('transactions').insert([
-      { date: nowStr, name: currentUser.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' },
-      { date: nowStr, name: '국고(중앙은행)', type: '상점 수입', amount: item.price, note: `${currentUser.name} 구매`, status: 'Success' }
-    ]);
-
-    await supabase!.from('inventory').insert([
-      { date: nowStr, name: currentUser.name, item_id: item.item_id, item_name: item.name, serial: serialCode, status: 'Unused', expiry: expiryStr }
-    ]);
-
+    if (isFrozen) { showAlert('❄️ 방학 중에는 상점을 이용할 수 없습니다.'); return; }
+    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const serial = 'SN-' + Math.floor(100000 + Math.random() * 900000);
+    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' }]);
+    await supabase!.from('inventory').insert([{ date: nowStr, name: currentUser.name, item_id: item.item_id, item_name: item.name, serial, status: 'Unused', expiry: '2026-08-31' }]);
     await supabase!.from('shop_items').update({ stock: item.stock - 1 }).eq('item_id', item.item_id);
-
     await loadData();
     await loadBag(currentUser.name);
-    showAlert(`🎉 '${item.name}' 구매 완료! [가방] 탭에서 확인하세요.`);
+    showAlert(`🎉 '${item.name}' 구매 완료! [가방]에서 확인하세요.`);
   };
 
-  // =============================================================
-  // 1. 메인 로그인 화면
-  // =============================================================
+  // 관리자 모드
+  if (loginMode === 'Admin') {
+    return (
+      <AdminPanel 
+        supabase={supabase} userList={userList} transactions={transactions} 
+        seats={seats} fundData={fundData} isFrozen={isFrozen} 
+        loadData={loadData} showAlert={showAlert} onLogout={() => setLoginMode('None')} 
+      />
+    );
+  }
+
+  // 로그인 전 메인
   if (loginMode === 'None') {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4">
-        {/* 안내문 배너: 화면 중앙 폭 내부에 완벽 고정 */}
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4 relative">
         {alertMsg && (
-          <div className="fixed top-6 left-0 right-0 max-w-sm mx-auto px-4 z-50 pointer-events-none">
-            <div className="bg-indigo-600/95 backdrop-blur-md text-white py-3 px-4 rounded-2xl text-xs font-bold shadow-2xl text-center border border-indigo-400/30 animate-bounce">
-              {alertMsg}
-            </div>
+          <div className="fixed top-6 left-0 right-0 max-w-xs mx-auto z-50 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
+            {alertMsg}
           </div>
         )}
-        
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-block p-4 bg-indigo-600/20 rounded-2xl border border-indigo-500/30 text-4xl mb-1">🚀</div>
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-7 shadow-2xl space-y-6">
+          <div className="text-center space-y-1">
+            <div className="text-4xl mb-1">🚀</div>
             <h1 className="text-2xl font-black text-indigo-400">우주 디지털 학급은행</h1>
-            <p className="text-xs text-slate-400">화성 테라포밍 자치 정부 경제 포털</p>
+            <p className="text-xs text-slate-400">화성 테라포밍 경제 포털</p>
           </div>
-
-          {notice && (
-            <div className="bg-indigo-950/60 border border-indigo-500/30 p-3.5 rounded-2xl text-xs text-indigo-200">
-              ✨ <strong>공지:</strong> {notice}
-            </div>
-          )}
-
-          <form onSubmit={handleStudentLogin} className="space-y-3.5 pt-1">
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1 ml-1">대원 이름 (실명)</label>
-              <input 
-                type="text" 
-                placeholder="예: 최정호" 
-                value={loginName} 
-                onChange={e => setLoginName(e.target.value)} 
-                className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1 ml-1">로그인 비밀번호</label>
-              <input 
-                type="password" 
-                placeholder="비밀번호 입력" 
-                value={loginPw} 
-                onChange={e => setLoginPw(e.target.value)} 
-                className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-              />
-            </div>
-            
-            <button 
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
-            >
-              <User size={18} /> 통장 접속하기
-            </button>
+          {notice && <div className="bg-indigo-950/60 p-3 rounded-2xl text-xs text-indigo-200 border border-indigo-500/30">✨ {notice}</div>}
+          <form onSubmit={handleStudentLogin} className="space-y-3">
+            <input type="text" placeholder="대원 이름 (실명)" value={loginName} onChange={e => setLoginName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white outline-none focus:border-indigo-500"/>
+            <input type="password" placeholder="비밀번호" value={loginPw} onChange={e => setLoginPw(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white outline-none focus:border-indigo-500"/>
+            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-sm shadow-lg">통장 접속하기</button>
           </form>
-
           <div className="pt-2 border-t border-slate-800 space-y-2">
-            <button 
-              onClick={() => setShowSignupModal(true)}
-              className="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition"
-            >
-              <UserPlus size={16} /> 🚀 처음 왔나요? 대원 회원가입 신청하기
-            </button>
-
-            <button 
-              onClick={() => setShowAdminModal(true)}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl font-bold text-xs border border-slate-700/60 flex items-center justify-center gap-1.5 transition"
-            >
-              <ShieldCheck size={15} /> 선생님 관리자 센터 접속
-            </button>
+            <button onClick={() => setShowSignupModal(true)} className="w-full bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5"><UserPlus size={16}/> 처음 왔나요? 회원가입 신청</button>
+            <button onClick={() => setShowAdminModal(true)} className="w-full bg-slate-800 text-slate-400 py-2.5 rounded-xl font-bold text-xs border border-slate-700/60 flex items-center justify-center gap-1"><ShieldCheck size={15}/> 선생님 관제 센터</button>
           </div>
         </div>
 
-        {/* 회원가입 모달 */}
         {showSignupModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
-              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                <h3 className="font-bold text-base text-emerald-400 flex items-center gap-2">
-                  <UserPlus size={18} /> 대원 회원가입 신청
-                </h3>
-                <button onClick={() => setShowSignupModal(false)} className="text-slate-400 hover:text-white text-sm">✕</button>
-              </div>
-
-              <form onSubmit={handleStudentSignup} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">내 실명 (이름)</label>
-                  <input 
-                    type="text" 
-                    placeholder="예: 김우주" 
-                    value={regName} 
-                    onChange={e => setRegName(e.target.value)} 
-                    className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">로그인 비밀번호</label>
-                  <input 
-                    type="password" 
-                    placeholder="접속용 비밀번호" 
-                    value={regPw} 
-                    onChange={e => setRegPw(e.target.value)} 
-                    className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">송금 2차 비밀번호 (선택)</label>
-                  <input 
-                    type="password" 
-                    placeholder="미입력 시 로그인 비번과 동일" 
-                    value={regTransferPw} 
-                    onChange={e => setRegTransferPw(e.target.value)} 
-                    className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white"
-                  />
-                </div>
-
-                <div className="bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-500/20 text-[11px] text-indigo-300">
-                  💡 가입 신청 후 선생님이 승인하면 즉시 로그인할 수 있습니다.
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => setShowSignupModal(false)} className="flex-1 bg-slate-800 py-3 rounded-xl font-bold text-xs text-slate-400">
-                    취소
-                  </button>
-                  <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-xs text-white">
-                    가입 신청 완료
-                  </button>
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-3">
+              <h3 className="font-bold text-emerald-400">대원 회원가입</h3>
+              <form onSubmit={handleStudentSignup} className="space-y-2.5 text-xs">
+                <input type="text" placeholder="실명 입력" value={regName} onChange={e => setRegName(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+                <input type="password" placeholder="접속 비밀번호" value={regPw} onChange={e => setRegPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+                <input type="password" placeholder="송금 비밀번호(선택)" value={regTransferPw} onChange={e => setRegTransferPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={() => setShowSignupModal(false)} className="flex-1 bg-slate-800 py-2.5 rounded-xl font-bold">취소</button>
+                  <button type="submit" className="flex-1 bg-emerald-600 py-2.5 rounded-xl font-bold">신청 완료</button>
                 </div>
               </form>
             </div>
           </div>
         )}
 
-        {/* 관리자 모달 */}
         {showAdminModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full space-y-4">
-              <h3 className="font-bold text-base text-indigo-400 flex items-center gap-2">
-                <ShieldCheck size={18} /> 선생님 관제 접속
-              </h3>
-              <form onSubmit={handleAdminLogin} className="space-y-3">
-                <input 
-                  type="password" 
-                  placeholder="관리자 마스터 비밀번호" 
-                  value={adminPwInput} 
-                  onChange={e => setAdminPwInput(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white text-center"
-                />
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowAdminModal(false)} className="flex-1 bg-slate-800 py-2.5 rounded-xl font-bold text-xs text-slate-400">
-                    취소
-                  </button>
-                  <button type="submit" className="flex-1 bg-indigo-600 py-2.5 rounded-xl font-bold text-xs text-white">
-                    접속
-                  </button>
-                </div>
-              </form>
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full space-y-3 text-center">
+              <h3 className="font-bold text-indigo-400">선생님 접속</h3>
+              <input type="password" placeholder="마스터 비밀번호" value={adminPwInput} onChange={e => setAdminPwInput(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-center text-xs"/>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAdminModal(false)} className="flex-1 bg-slate-800 py-2 rounded-xl text-xs">취소</button>
+                <button onClick={() => { if (adminPwInput === 'admin1234' || adminPwInput === '1234') setLoginMode('Admin'); else showAlert('비밀번호 불일치'); }} className="flex-1 bg-indigo-600 py-2 rounded-xl text-xs font-bold">접속</button>
+              </div>
             </div>
           </div>
         )}
@@ -541,516 +270,166 @@ export default function App() {
     );
   }
 
-  // =============================================================
-  // 2. 관리자 관제 센터
-  // =============================================================
-  if (loginMode === 'Admin') {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white pb-24">
-        {alertMsg && (
-          <div className="fixed top-4 left-0 right-0 max-w-sm mx-auto px-4 z-50 pointer-events-none">
-            <div className="bg-indigo-600/95 backdrop-blur-md text-white py-3 px-4 rounded-2xl text-xs font-bold shadow-2xl text-center">
-              {alertMsg}
-            </div>
-          </div>
-        )}
-        
-        <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 flex justify-between items-center max-w-4xl mx-auto">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">👨‍🏫</span>
-            <div><h1 className="font-bold text-indigo-400">학급 중앙은행 관제 데스크</h1><p className="text-xs text-slate-400">Supabase 실시간 클라우드 연동</p></div>
-          </div>
-          <button onClick={() => setLoginMode('None')} className="text-xs bg-slate-800 px-3 py-2 rounded-xl text-slate-300 flex items-center gap-1"><LogOut size={14}/> 로그아웃</button>
-        </header>
-
-        <main className="max-w-4xl mx-auto p-4 space-y-6">
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {[
-              { id: 'students', label: '👥 학생 승인/관리' },
-              { id: 'salary', label: '💸 주급 일괄 정산' },
-              { id: 'loans', label: '🏦 대출/독촉 관리' },
-              { id: 'freeze', label: '❄️ 방학 동결 모드' }
-            ].map(m => (
-              <button key={m.id} onClick={() => setAdminTab(m.id as any)} className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap ${adminTab === m.id ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'}`}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {adminTab === 'students' && (
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-              <h3 className="font-bold text-sm text-yellow-400">👥 등록된 대원 명단 ({userList.length}명)</h3>
-              <div className="space-y-2">
-                {userList.map(u => (
-                  <div key={u.id} className="bg-slate-950 p-3 rounded-xl flex justify-between items-center border border-slate-800 text-xs">
-                    <div>
-                      <p className="font-bold text-white">{u.name} ({u.job})</p>
-                      <p className="text-slate-400">상태: <strong className={u.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400'}>{u.status}</strong></p>
-                    </div>
-                    {u.status === 'Pending' ? (
-                      <button 
-                        onClick={async () => { 
-                          await supabase!.from('users').update({ status: 'Approved' }).eq('id', u.id); 
-                          loadData(); 
-                          showAlert(`✅ ${u.name} 대원의 가입을 승인했습니다!`); 
-                        }} 
-                        className="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg font-bold text-white"
-                      >
-                        승인하기
-                      </button>
-                    ) : (
-                      <span className="text-slate-500 text-[11px]">승인됨</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {adminTab === 'salary' && (
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-              <h3 className="font-bold text-sm text-indigo-400">💰 주급 일괄 지급 (세율 10% 자동 차감)</h3>
-              <button 
-                onClick={async () => {
-                  const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-                  const rows = userList.filter(u => u.status === 'Approved').map(u => ({
-                    date: nowStr, name: u.name, type: '주급', amount: 126, note: '기본:140|세금:14', status: 'Success'
-                  }));
-                  await supabase!.from('transactions').insert(rows);
-                  loadData();
-                  showAlert('💸 전원 주급 126안 입금이 완료되었습니다!');
-                }} 
-                className="w-full bg-indigo-600 py-3.5 rounded-xl font-bold text-sm"
-              >
-                전원 주급 126안 일괄 지급 실행
-              </button>
-            </div>
-          )}
-          {/* ========================================================= */}
-          {/* [1] 대출 발급 및 독촉 관리 탭 */}
-          {/* ========================================================= */}
-          {adminTab === 'loans' && (
-            <div className="space-y-4">
-              {/* 신규 대출 발급 폼 */}
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-                <h3 className="font-bold text-sm text-indigo-400">🏦 신규 특례 대출 발급 (4주 분할 상환)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <label className="block text-slate-400 mb-1">대출 대상 학생</label>
-                    <select 
-                      value={transferTarget} 
-                      onChange={e => setTransferTarget(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white"
-                    >
-                      <option value="">학생 선택</option>
-                      {userList.filter(u => u.status === 'Approved').map(u => (
-                        <option key={u.id} value={u.name}>{u.name} ({u.job})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 mb-1">대출 원금 (안)</label>
-                    <input 
-                      type="number" 
-                      placeholder="예: 100" 
-                      value={transferAmt} 
-                      onChange={e => setTransferAmt(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white" 
-                    />
-                  </div>
-                </div>
-                <button 
-                  onClick={async () => {
-                    const amt = parseInt(transferAmt);
-                    if (!transferTarget || isNaN(amt) || amt <= 0) {
-                      showAlert('⚠️ 대상 학생과 대출 금액을 확인하세요.');
-                      return;
-                    }
-                    const targetUser = userList.find(u => u.name === transferTarget);
-                    const newLoan = Number(targetUser.loan_balance || 0) + amt;
-                    const newWeekly = Math.ceil(amt / 4);
-
-                    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-                    await supabase!.from('transactions').insert([
-                      { date: nowStr, name: transferTarget, type: '특례 대출 입금', amount: amt, note: '4주 분할 상환 대출', status: 'Success' }
-                    ]);
-                    await supabase!.from('users').update({ 
-                      loan_balance: newLoan, 
-                      weekly_repay: Number(targetUser.weekly_repay || 0) + newWeekly 
-                    }).eq('name', transferTarget);
-
-                    setTransferAmt('');
-                    await loadData();
-                    showAlert(`✅ ${transferTarget} 학생에게 ${amt}안 대출을 지급했습니다!`);
-                  }}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs shadow-lg transition"
-                >
-                  대출 실행 및 학생 계좌에 입금
-                </button>
-              </div>
-
-              {/* 연체 독촉장 관리 */}
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-                <h3 className="font-bold text-sm text-rose-400">🚨 대출자 목록 및 독촉장 제어</h3>
-                {userList.filter(u => Number(u.loan_balance) > 0).length === 0 ? (
-                  <p className="text-xs text-slate-500 py-3 text-center">현재 대출 잔액이 있는 학생이 없습니다.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {userList.filter(u => Number(u.loan_balance) > 0).map(u => (
-                      <div key={u.id} className="bg-slate-950 p-3.5 rounded-xl flex justify-between items-center border border-slate-800 text-xs">
-                        <div>
-                          <p className="font-bold text-white">{u.name} ({u.job})</p>
-                          <p className="text-rose-400 font-bold">대출 잔액: {u.loan_balance} 안</p>
-                        </div>
-                        <button 
-                          onClick={async () => {
-                            const newDun = u.dunning === 'ON' ? '' : 'ON';
-                            await supabase!.from('users').update({ dunning: newDun }).eq('id', u.id);
-                            await loadData();
-                            showAlert(`${u.name} 대원의 독촉장을 [${newDun ? '활성화' : '해제'}] 했습니다.`);
-                          }}
-                          className={`px-3.5 py-2 rounded-xl font-bold transition ${u.dunning === 'ON' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
-                        >
-                          {u.dunning === 'ON' ? '🚨 독촉장 켜짐' : '📢 독촉장 발송'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================= */}
-          {/* [2] 방학 동결 및 점검 모드 제어 탭 */}
-          {/* ========================================================= */}
-          {adminTab === 'freeze' && (
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-              <h3 className="font-bold text-sm text-indigo-400">⚙️ 학급 경제 특수 운영 모드</h3>
-              
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-sm text-white">❄️ 방학(경제 동결) 모드</p>
-                  <p className="text-xs text-slate-400 mt-0.5">학생들의 송금, 신규 구매, 예금 개설을 잠그고 조회 및 대출 상환만 허용합니다.</p>
-                </div>
-                <button 
-                  onClick={async () => {
-                    const nextVal = isFrozen ? 'FALSE' : 'TRUE';
-                    await supabase!.from('system_config').upsert({ key: 'is_vacation', value: nextVal });
-                    await loadData();
-                    showAlert(isFrozen ? '☀️ 방학 모드가 해제되었습니다.' : '❄️ 방학 모드가 가동되었습니다.');
-                  }}
-                  className={`px-4 py-2.5 rounded-xl font-bold text-xs transition ${isFrozen ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
-                >
-                  {isFrozen ? '동결 중 (ON)' : '해제됨 (OFF)'}
-                </button>
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-sm text-white">🏦 정기예금 신규 가입 창구</p>
-                  <p className="text-xs text-slate-400 mt-0.5">학생들이 정기예금 상품에 신규 가입할 수 있도록 창구를 엽니다.</p>
-                </div>
-                <button 
-                  onClick={async () => {
-                    const nextVal = depositOpen ? 'FALSE' : 'TRUE';
-                    await supabase!.from('system_config').upsert({ key: 'deposit_open', value: nextVal });
-                    await loadData();
-                    showAlert(depositOpen ? '🔒 예금 창구가 닫혔습니다.' : '🟢 예금 창구가 열렸습니다.');
-                  }}
-                  className={`px-4 py-2.5 rounded-xl font-bold text-xs transition ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
-                >
-                  {depositOpen ? '창구 열림 (ON)' : '창구 닫힘 (OFF)'}
-                </button>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    );
-  }
-
-  // =============================================================
-  // 3. 학생 대시보드 화면
-  // =============================================================
+  // 학생 모드 메인 화면
   const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
-  const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((acc, cur) => acc + Number(cur.amount), 0);
-  const myDepositTrans = myTrans.filter(t => t.status === 'Deposit_Active');
-  const myDepositBalance = myDepositTrans.reduce((acc, cur) => acc + Math.abs(Number(cur.amount)), 0);
+  const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((a, c) => a + Number(c.amount), 0);
+  const myDepositBalance = myTrans.filter(t => t.status === 'Deposit_Active').reduce((a, c) => a + Math.abs(Number(c.amount)), 0);
 
   return (
-    <div className="max-w-md mx-auto bg-slate-950 min-h-screen shadow-2xl pb-28 text-white">
-      {/* 안내문 배너: 학생 화면 안쪽에 완벽 고정 */}
+    <div className="max-w-md mx-auto bg-slate-950 min-h-screen shadow-2xl pb-28 text-white relative">
       {alertMsg && (
-        <div className="fixed top-4 left-0 right-0 max-w-sm mx-auto px-4 z-50 pointer-events-none">
-          <div className="bg-indigo-600/95 backdrop-blur-md text-white py-3 px-4 rounded-2xl text-xs font-bold shadow-2xl text-center border border-indigo-400/30 animate-bounce">
-            {alertMsg}
-          </div>
+        <div className="fixed top-4 left-0 right-0 max-w-xs mx-auto z-50 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
+          {alertMsg}
         </div>
       )}
 
-      {/* 헤더 */}
       <header className="bg-gradient-to-b from-indigo-700 to-indigo-900 p-6 rounded-b-[2rem] shadow-xl">
         <div className="flex justify-between items-center mb-3">
-          <span className="font-black text-xs tracking-wider text-indigo-200">SPACE CLASS BANK</span>
-          <button onClick={() => setLoginMode('None')} className="bg-black/30 p-1.5 rounded-full text-xs border border-white/10"><LogOut size={14} /></button>
+          <span className="font-black text-xs text-indigo-200">SPACE CLASS BANK</span>
+          <button onClick={() => setLoginMode('None')} className="bg-black/30 p-1.5 rounded-full text-xs"><LogOut size={14}/></button>
         </div>
-        <p className="text-xs text-indigo-200">{currentUser.name} 대원 ({currentUser.job})</p>
+        <p className="text-xs text-indigo-200">{currentUser.name} ({currentUser.job})</p>
         <div className="text-4xl font-black text-yellow-300 mt-1">{myBalance.toLocaleString()} <span className="text-lg text-yellow-400">안</span></div>
         <div className="flex gap-2 pt-2">
-          <span className="bg-yellow-400/20 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-yellow-400/30">
-            {myBalance >= 1000 ? '👑 은하 대부호' : myBalance >= 500 ? '🚀 행성 개척자' : '👨‍🚀 우주 시민'}
-          </span>
-          {myDepositBalance > 0 && (
-            <span className="bg-blue-400/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-blue-400/30">
-              🏦 예금: {myDepositBalance.toLocaleString()}안
-            </span>
-          )}
+          <span className="bg-yellow-400/20 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-yellow-400/30">{myBalance >= 1000 ? '👑 은하 대부호' : '👨‍🚀 우주 시민'}</span>
+          {myDepositBalance > 0 && <span className="bg-blue-400/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-md">🏦 예금: {myDepositBalance}안</span>}
         </div>
       </header>
 
       {currentUser.dunning === 'ON' && !isFrozen && (
-        <div className="bg-rose-900/60 border-l-4 border-rose-500 p-3 mx-4 mt-4 rounded-r-xl text-xs text-rose-200">
-          🚨 <strong>중앙은행 독촉장:</strong> 대출이 연체되었습니다. [대출상환]에서 즉시 갚아주세요!
+        <div className="bg-rose-900/60 p-3 mx-4 mt-4 rounded-xl text-xs text-rose-200 border-l-4 border-rose-500">
+          🚨 <strong>중앙은행 독촉장:</strong> 대출이 연체되었습니다. 즉시 상환해주세요!
         </div>
       )}
 
-      {/* 본문 탭 영역 */}
       <main className="p-4 space-y-4">
-        {/* ========================================================= */}
-        {/* [1] 통장 홈 (6개 그리드 메뉴) */}
-        {/* ========================================================= */}
         {activeTab === 'wallet' && (
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-2.5">
-              <button onClick={() => setActiveTab('transfer')} className="bg-indigo-600 hover:bg-indigo-500 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 shadow transition">
-                <ArrowRightLeft size={18} /> 송금
-              </button>
-              <button onClick={() => setActiveTab('deposit')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
-                <Landmark size={18} className="text-yellow-400" /> 정기예금
-              </button>
-              <button onClick={() => setActiveTab('loan')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
-                <AlertTriangle size={18} className={currentUser.loan_balance > 0 ? "text-rose-400" : "text-slate-400"} /> 대출상환
-              </button>
-              <button onClick={() => setActiveTab('withdraw')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
-                <Receipt size={18} className="text-indigo-300" /> 현금출금
-              </button>
-              <button onClick={() => setActiveTab('payslip')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
-                <FileText size={18} className="text-emerald-400" /> 명세서
-              </button>
-              <button onClick={() => setActiveTab('settings')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
-                <Settings size={18} className="text-slate-400" /> 비번관리
-              </button>
+              <button onClick={() => setActiveTab('transfer')} className="bg-indigo-600 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 shadow"><ArrowRightLeft size={18}/> 송금</button>
+              <button onClick={() => setActiveTab('deposit')} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5"><Landmark size={18} className="text-yellow-400"/> 정기예금</button>
+              <button onClick={() => setActiveTab('loan')} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5"><AlertTriangle size={18} className={currentUser.loan_balance > 0 ? "text-rose-400" : "text-slate-400"}/> 대출상환</button>
+              <button onClick={() => setActiveTab('withdraw')} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5"><Receipt size={18} className="text-indigo-300"/> 현금출금</button>
+              <button onClick={() => setActiveTab('payslip')} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5"><FileText size={18} className="text-emerald-400"/> 명세서</button>
+              <button onClick={() => setActiveTab('settings')} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5"><Settings size={18} className="text-slate-400"/> 비번관리</button>
             </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-              <h3 className="font-bold text-xs text-slate-400">최근 내역</h3>
-              <div className="space-y-2">
-                {myTrans.slice(0, 5).map(t => (
-                  <div key={t.id} className="flex justify-between items-center text-xs py-1.5 border-b border-slate-800/60 last:border-none">
-                    <div><p className="font-bold text-slate-200">{t.note || t.type}</p><p className="text-[10px] text-slate-500">{t.date}</p></div>
-                    <span className={`font-black ${Number(t.amount) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {Number(t.amount) > 0 ? `+${t.amount}` : t.amount} 안
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* [2] 송금 상세 화면 */}
-        {/* ========================================================= */}
-        {activeTab === 'transfer' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-indigo-400 text-sm flex items-center gap-2"><ArrowRightLeft size={16}/> 안전 송금</h2>
-              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5"><ChevronLeft size={14}/> 뒤로가기</button>
-            </div>
-            <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white">
-              <option value="">받는 대원 선택</option>
-              {userList.filter(u => u.name !== currentUser.name && u.status === 'Approved').map(u => (
-                <option key={u.id} value={u.name}>{u.name} ({u.job})</option>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+              <h3 className="font-bold text-xs text-slate-400">최근 입출금 내역</h3>
+              {myTrans.slice(0, 5).map(t => (
+                <div key={t.id} className="flex justify-between items-center text-xs py-1.5 border-b border-slate-800/60 last:border-none">
+                  <div><p className="font-bold">{t.note || t.type}</p><p className="text-[10px] text-slate-500">{t.date}</p></div>
+                  <span className={`font-black ${Number(t.amount) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{Number(t.amount) > 0 ? `+${t.amount}` : t.amount} 안</span>
+                </div>
               ))}
-            </select>
-            <input type="number" placeholder="보낼 금액 (안)" value={transferAmt} onChange={e => setTransferAmt(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <input type="password" placeholder="송금 2차 비밀번호" value={transferPw} onChange={e => setTransferPw(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <button onClick={handleTransfer} className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">송금 실행</button>
+            </div>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* [3] 현금 출금 상세 화면 */}
-        {/* ========================================================= */}
+        {activeTab === 'transfer' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+            <div className="flex justify-between items-center"><h2 className="font-bold text-indigo-400 text-sm">안전 송금</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"><option value="">받는 대원 선택</option>{userList.filter(u => u.name !== currentUser.name && u.status === 'Approved').map(u => <option key={u.id} value={u.name}>{u.name}</option>)}</select>
+            <input type="number" placeholder="보낼 금액" value={transferAmt} onChange={e => setTransferAmt(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <input type="password" placeholder="송금 비밀번호" value={transferPw} onChange={e => setTransferPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <button onClick={handleTransfer} className="w-full bg-indigo-600 py-3 rounded-xl font-bold">송금 실행</button>
+          </div>
+        )}
+
         {activeTab === 'withdraw' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-indigo-400 text-sm flex items-center gap-2"><Receipt size={16}/> 현금 출금 사전 신청</h2>
-              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5"><ChevronLeft size={14}/> 뒤로가기</button>
-            </div>
-            <p className="text-xs text-slate-400">신청 후 선생님(은행원)의 확인을 거치면 실물 화폐로 교환해 드립니다.</p>
-            <input type="number" placeholder="출금할 금액 (안)" value={withdrawAmt} onChange={e => setWithdrawAmt(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <input type="password" placeholder="결제용 2차 비밀번호" value={withdrawPw} onChange={e => setWithdrawPw(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <button onClick={handleWithdraw} className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">출금 신청하기</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+            <div className="flex justify-between items-center"><h2 className="font-bold text-indigo-400 text-sm">현금 출금 사전 신청</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            <input type="number" placeholder="출금액" value={withdrawAmt} onChange={e => setWithdrawAmt(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <input type="password" placeholder="비밀번호" value={withdrawPw} onChange={e => setWithdrawPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <button onClick={handleWithdraw} className="w-full bg-indigo-600 py-3 rounded-xl font-bold">신청하기</button>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* [4] 정기예금 상세 화면 */}
-        {/* ========================================================= */}
         {activeTab === 'deposit' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-yellow-400 text-sm flex items-center gap-2"><Landmark size={16}/> 정기예금 센터</h2>
-              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5"><ChevronLeft size={14}/> 뒤로가기</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+            <div className="flex justify-between items-center"><h2 className="font-bold text-yellow-400 text-sm">정기예금 센터</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setDepositType('short')} className={`p-3 rounded-xl border font-bold ${depositType === 'short' ? 'bg-indigo-600/30 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>단기 (7일, 3%)</button>
+              <button onClick={() => setDepositType('long')} className={`p-3 rounded-xl border font-bold ${depositType === 'long' ? 'bg-indigo-600/30 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>장기 (28일, 15%)</button>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button onClick={() => setDepositType('short')} className={`p-3 rounded-xl border text-center font-bold transition ${depositType === 'short' ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                벼락치기 단기<br/><span className="text-[10px] text-slate-400">1주 (7일) / 이율 3%</span>
-              </button>
-              <button onClick={() => setDepositType('long')} className={`p-3 rounded-xl border text-center font-bold transition ${depositType === 'long' ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                거북이 장기<br/><span className="text-[10px] text-slate-400">4주 (28일) / 이율 15%</span>
-              </button>
-            </div>
-            <input type="number" placeholder="예금할 금액 (10안 ~ 300안)" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <input type="password" placeholder="결제용 비밀번호" value={depositPw} onChange={e => setDepositPw(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <button onClick={handleDeposit} className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">정기예금 개설하기</button>
+            <input type="number" placeholder="예금할 금액" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <input type="password" placeholder="비밀번호" value={depositPw} onChange={e => setDepositPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <button onClick={handleDeposit} className="w-full bg-indigo-600 py-3 rounded-xl font-bold">예금 개설</button>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* [5] 대출 상환 상세 화면 */}
-        {/* ========================================================= */}
         {activeTab === 'loan' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-rose-400 text-sm flex items-center gap-2"><AlertTriangle size={16}/> 대출금 상환</h2>
-              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5"><ChevronLeft size={14}/> 뒤로가기</button>
-            </div>
-            <div className="p-4 bg-rose-950/40 rounded-xl text-center border border-rose-500/20">
-              <p className="text-xs text-rose-300">남은 대출 잔액</p>
-              <p className="text-2xl font-black text-rose-400">{currentUser.loan_balance} 안</p>
-            </div>
-            <input type="number" placeholder="상환할 금액" value={repayAmt} onChange={e => setRepayAmt(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <input type="password" placeholder="결제용 비밀번호" value={repayPw} onChange={e => setRepayPw(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white" />
-            <button onClick={handleLoanRepay} className="w-full bg-rose-600 hover:bg-rose-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">상환하기</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+            <div className="flex justify-between items-center"><h2 className="font-bold text-rose-400 text-sm">대출금 상환</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            <div className="p-3 bg-rose-950/40 rounded-xl text-center font-bold text-rose-400 text-base">남은 대출: {currentUser.loan_balance} 안</div>
+            <input type="number" placeholder="상환 금액" value={repayAmt} onChange={e => setRepayAmt(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <input type="password" placeholder="비밀번호" value={repayPw} onChange={e => setRepayPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <button onClick={handleLoanRepay} className="w-full bg-rose-600 py-3 rounded-xl font-bold">상환하기</button>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* [6] 명세서 상세 화면 */}
-        {/* ========================================================= */}
         {activeTab === 'payslip' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-indigo-400 text-sm flex items-center gap-2"><FileText size={16}/> 주급 및 임대료 명세서</h2>
-              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5"><ChevronLeft size={14}/> 뒤로가기</button>
-            </div>
-            <div className="space-y-2">
-              {myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center">발급된 명세서가 없습니다.</p>
-              ) : (
-                myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').map(t => (
-                  <div key={t.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1">
-                    <div className="flex justify-between font-bold">
-                      <span className={t.type === '주급' ? 'text-emerald-400' : 'text-rose-400'}>
-                        {t.type === '주급' ? '💵 주급 지급 명세서' : '🏠 좌석 임대료 납부서'}
-                      </span>
-                      <span>{t.amount > 0 ? `+${t.amount}` : t.amount} 안</span>
-                    </div>
-                    <p className="text-slate-400 text-[11px]">{t.note}</p>
-                    <p className="text-slate-500 text-[10px]">{t.date}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* [7] 비밀번호 관리 상세 화면 */}
-        {/* ========================================================= */}
-        {activeTab === 'settings' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-slate-300 text-sm flex items-center gap-2"><Settings size={16}/> 비밀번호 관리</h2>
-              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5"><ChevronLeft size={14}/> 뒤로가기</button>
-            </div>
-            <div className="space-y-2 text-xs">
-              <label className="block text-slate-400">새 로그인 비밀번호</label>
-              <input 
-                type="password" 
-                placeholder="새 비밀번호 입력" 
-                value={newLoginPw} 
-                onChange={e => setNewLoginPw(e.target.value)} 
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white" 
-              />
-            </div>
-            <button onClick={handleChangePassword} className="w-full bg-slate-800 hover:bg-slate-700 py-3.5 rounded-xl font-bold text-xs border border-slate-700">
-              비밀번호 변경 저장
-            </button>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* [8] 상점 탭 */}
-        {/* ========================================================= */}
-        {activeTab === 'store' && (
-          <div className="space-y-3">
-            <h2 className="font-bold text-indigo-400 text-sm">🛒 우주 매점</h2>
-            {shopItems.map(item => (
-              <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center">
-                <div><h3 className="font-bold text-xs">{item.name}</h3><p className="text-[10px] text-slate-500">재고: {item.stock}개 | 가격: {item.price}안</p></div>
-                <button onClick={() => handleBuyItem(item)} className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-xl text-xs font-bold transition">구매</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+            <div className="flex justify-between items-center"><h2 className="font-bold text-indigo-400 text-sm">주급 및 임대료 명세서</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            {myTrans.filter(t => t.type === '주급' || t.type === '임대료 납부').map(t => (
+              <div key={t.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div className="flex justify-between font-bold"><span className={t.type === '주급' ? 'text-emerald-400' : 'text-rose-400'}>{t.type}</span><span>{t.amount}안</span></div>
+                <p className="text-[10px] text-slate-400 mt-1">{t.note} ({t.date})</p>
               </div>
             ))}
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* [9] 가방 탭 */}
-        {/* ========================================================= */}
+        {activeTab === 'settings' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+            <div className="flex justify-between items-center"><h2 className="font-bold text-slate-300 text-sm">비밀번호 관리</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
+            <input type="password" placeholder="새 비밀번호" value={newLoginPw} onChange={e => setNewLoginPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
+            <button onClick={async () => { await supabase!.from('users').update({ password: newLoginPw.trim() }).eq('name', currentUser.name); setActiveTab('wallet'); showAlert('비밀번호 변경 완료!'); }} className="w-full bg-slate-800 py-3 rounded-xl font-bold">저장하기</button>
+          </div>
+        )}
+
+        {activeTab === 'store' && (
+          <div className="space-y-3">
+            <h2 className="font-bold text-indigo-400 text-sm">🛒 우주 매점</h2>
+            {shopItems.map(item => (
+              <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center text-xs">
+                <div><h3 className="font-bold">{item.name}</h3><p className="text-[10px] text-slate-500">재고 {item.stock}개 | 가격 {item.price}안</p></div>
+                <button onClick={() => handleBuyItem(item)} className="bg-indigo-600 px-4 py-2 rounded-xl font-bold">구매</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {activeTab === 'bag' && (
           <div className="space-y-3">
             <h2 className="font-bold text-indigo-400 text-sm">🎒 내 쿠폰 가방</h2>
-            {bagItems.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-500 bg-slate-900 rounded-2xl border border-slate-800">보유한 쿠폰이 없습니다.</div>
-            ) : (
-              bagItems.map(b => (
-                <div key={b.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center">
-                  <div><h3 className="font-bold text-xs">{b.item_name}</h3><p className="text-[10px] text-indigo-400">SN: {b.serial} (~{b.expiry})</p></div>
-                  <button onClick={() => setSelectedQr(b)} className="bg-slate-800 px-3 py-1.5 rounded-xl text-xs border border-slate-700 font-bold">QR 보기</button>
-                </div>
-              ))
-            )}
+            {bagItems.length === 0 ? <div className="text-center py-6 text-xs text-slate-500">가방이 비어 있습니다.</div> : bagItems.map(b => (
+              <div key={b.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center text-xs">
+                <div><h3 className="font-bold">{b.item_name}</h3><p className="text-[10px] text-indigo-400">SN: {b.serial}</p></div>
+                <button onClick={() => setSelectedQr(b)} className="bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 font-bold">QR 보기</button>
+              </div>
+            ))}
           </div>
         )}
       </main>
 
-      {/* QR 모달 */}
       {selectedQr && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full text-center space-y-4">
-            <h3 className="font-bold text-sm text-white">{selectedQr.item_name}</h3>
-            <div className="bg-white p-5 rounded-2xl inline-block">
-              <QrCode size={90} className="text-black" />
-              <p className="text-[11px] font-mono text-black font-bold mt-2">{selectedQr.serial}</p>
-            </div>
-            <button onClick={() => setSelectedQr(null)} className="w-full bg-slate-800 py-2.5 rounded-xl text-xs border border-slate-700 font-bold">닫기</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full text-center space-y-3">
+            <h3 className="font-bold text-sm">{selectedQr.item_name}</h3>
+            <div className="bg-white p-4 rounded-2xl inline-block"><QrCode size={90} className="text-black"/><p className="text-[11px] font-mono text-black font-bold mt-1">{selectedQr.serial}</p></div>
+            <button onClick={() => setSelectedQr(null)} className="w-full bg-slate-800 py-2 rounded-xl text-xs font-bold">닫기</button>
           </div>
         </div>
       )}
 
-      {/* 하단 고정 네비게이션 */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-slate-950/90 backdrop-blur-md border-t border-slate-800 flex justify-around p-3 rounded-t-3xl z-40">
         {[
           { id: 'wallet', label: '통장', icon: Wallet },
           { id: 'store', label: '상점', icon: Store },
           { id: 'bag', label: '가방', icon: QrCode }
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col items-center px-4 ${activeTab === tab.id || (activeTab !== 'store' && activeTab !== 'bag' && tab.id === 'wallet') ? 'text-indigo-400 font-bold' : 'text-slate-500'}`}>
-            <tab.icon size={20} />
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col items-center px-4 ${activeTab === tab.id || (tab.id === 'wallet' && !['store','bag'].includes(activeTab)) ? 'text-indigo-400 font-bold' : 'text-slate-500'}`}>
+            <tab.icon size={20}/>
             <span className="text-[10px] mt-1">{tab.label}</span>
           </button>
         ))}
