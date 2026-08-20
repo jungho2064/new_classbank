@@ -322,8 +322,8 @@ export default function App() {
   }
 
   // 학생 메인
-  const myTrans = transactions.filter(t => t.name === currentUser?.name && t.status !== 'Rejected');
-  const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((a, c) => a + Number(c.amount || 0), 0);
+  const myTrans = transactions.filter(t => t.name === currentUser?.name && t.status !== 'System');
+const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((a, c) => a + Number(c.amount || 0), 0);
   const myDepositBalance = myTrans.filter(t => t.status === 'Deposit_Active').reduce((a, c) => a + Math.abs(Number(c.amount || 0)), 0);
 
   return (
