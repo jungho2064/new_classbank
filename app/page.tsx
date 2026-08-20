@@ -201,14 +201,15 @@ export default function App() {
 
   // 관리자 모드
   if (loginMode === 'Admin') {
-    return (
-      <AdminPanel 
-        supabase={supabase} userList={userList} transactions={transactions} 
-        seats={seats} fundData={fundData} isFrozen={isFrozen} 
-        loadData={loadData} showAlert={showAlert} onLogout={() => setLoginMode('None')} 
-      />
-    );
-  }
+  return (
+    <AdminPanel 
+      supabase={supabase} userList={userList} transactions={transactions} 
+      seats={seats} fundData={fundData} isFrozen={isFrozen} 
+      depositOpen={depositOpen} setDepositOpen={setDepositOpen}
+      loadData={loadData} showAlert={showAlert} onLogout={() => setLoginMode('None')} 
+    />
+  );
+}
 
   // 로그인 전 메인
   if (loginMode === 'None') {
