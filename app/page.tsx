@@ -355,7 +355,13 @@ export default function App() {
   if (loginMode === 'None') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4">
-        {alertMsg && <div className="fixed top-6 bg-indigo-600 px-5 py-3 rounded-2xl z-50 text-xs font-bold animate-bounce shadow-2xl max-w-xs text-center">{alertMsg}</div>}
+        {alertMsg && (
+  <div className="fixed top-4 left-0 right-0 max-w-md mx-auto px-4 z-50 pointer-events-none">
+    <div className="bg-indigo-600/95 backdrop-blur-md text-white py-3 px-4 rounded-2xl text-xs font-bold shadow-2xl text-center border border-indigo-400/30 animate-bounce">
+      {alertMsg}
+    </div>
+  </div>
+)}
         
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
           <div className="text-center space-y-2">
@@ -685,28 +691,37 @@ export default function App() {
 
       {/* 본문 탭 */}
       <main className="p-4 space-y-4">
-        {activeTab === 'wallet' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2.5">
-              <button onClick={() => setActiveTab('transfer')} className="bg-indigo-600 hover:bg-indigo-500 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2 shadow transition">
-                <ArrowRightLeft size={20} /> 송금
-              </button>
-              <button onClick={() => setActiveTab('deposit')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2 transition">
-                <Landmark size={20} className="text-yellow-400" /> 정기예금
-              </button>
-              <button onClick={() => setActiveTab('loan')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2 transition">
-                <AlertTriangle size={20} className={currentUser.loan_balance > 0 ? "text-rose-400" : "text-slate-400"} /> 대출상환
-              </button>
-              <button onClick={() => setActiveTab('withdraw')} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2">
-                <Receipt size={20} className="text-indigo-400" /> 현금출금
-              </button>
-              <button onClick={() => setActiveTab('payslip')} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2">
-                <FileText size={20} className="text-indigo-400" /> 명세서
-              </button>
-              <button onClick={() => setActiveTab('settings')} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-2">
-                <Settings size={20} className="text-slate-400" /> 비번설정
-              </button>
-            </div>
+        {{activeTab === 'wallet' && (
+  <div className="space-y-4">
+    {/* 6개 그리드 메뉴 */}
+    <div className="grid grid-cols-3 gap-2.5">
+      <button onClick={() => setActiveTab('transfer')} className="bg-indigo-600 hover:bg-indigo-500 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 shadow transition">
+        <ArrowRightLeft size={18} /> 송금
+      </button>
+      <button onClick={() => setActiveTab('deposit')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
+        <Landmark size={18} className="text-yellow-400" /> 정기예금
+      </button>
+      <button onClick={() => setActiveTab('loan')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
+        <AlertTriangle size={18} className={currentUser?.loan_balance > 0 ? "text-rose-400" : "text-slate-400"} /> 대출상환
+      </button>
+      <button onClick={() => setActiveTab('withdraw')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
+        <Receipt size={18} className="text-indigo-300" /> 현금출금
+      </button>
+      <button onClick={() => setActiveTab('payslip')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
+        <FileText size={18} className="text-emerald-400" /> 명세서
+      </button>
+      <button onClick={() => setActiveTab('settings')} className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 transition">
+        <Settings size={18} className="text-slate-400" /> 비번관리
+      </button>
+    </div>
+
+    {/* 최근 내역 카드 */}
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <h3 className="font-bold text-xs text-slate-400">최근 내역</h3>
+      {/* 내역 목록 */}
+    </div>
+  </div>
+)}
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
               <h3 className="font-bold text-xs text-slate-400">최근 내역</h3>
