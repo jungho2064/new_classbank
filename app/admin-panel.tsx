@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { 
   Users, Award, DollarSign, Landmark, Building, 
-  Store, ListFilter, Settings, QrCode, TrendingUp, LogOut, Check, X, RefreshCw
+  Store, QrCode, TrendingUp, FileText, Settings, LogOut, Check, X, RefreshCw, Plus, Trash2
 } from 'lucide-react';
 
 export default function AdminPanel({ 
@@ -19,30 +19,29 @@ export default function AdminPanel({
   showAlert, 
   onLogout 
 }: any) {
-  // 안전한 배열 보장
   const safeUsers = Array.isArray(userList) ? userList : [];
   const safeTrans = Array.isArray(transactions) ? transactions : [];
   const safeSeats = Array.isArray(seats) ? seats : [];
 
-  const [adminTab, setAdminTab] = useState<'pending' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'audit' | 'qr' | 'funds' | 'system'>('pending');
+  const [adminTab, setAdminTab] = useState<'pending' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'qr' | 'funds' | 'audit' | 'system'>('pending');
 
-  // 상/벌금 폼 상태
+  // 상/벌금
   const [rewardTarget, setRewardTarget] = useState('');
   const [rewardType, setRewardType] = useState<'상금(+)' | '벌금(-)'>('상금(+)');
   const [rewardAmt, setRewardAmt] = useState('');
   const [rewardReason, setRewardReason] = useState('');
 
-  // 주급 설정
+  // 주급 세율
   const [taxRate, setTaxRate] = useState(10);
   const [maintRate, setMaintRate] = useState(5);
 
-  // 대출 발급 폼 상태
+  // 대출
   const [loanTarget, setLoanTarget] = useState('');
   const [loanAmt, setLoanAmt] = useState('');
   const [loanRate, setLoanRate] = useState('5.0');
   const [globalLoanRate, setGlobalLoanRate] = useState('5.0');
 
-  // 상점 신규 상품 등록 폼
+  // 상점 신규 등록
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemStock, setNewItemStock] = useState('10');
@@ -50,17 +49,17 @@ export default function AdminPanel({
   const [newItemPromo, setNewItemPromo] = useState(false);
   const [newItemDesc, setNewItemDesc] = useState('');
 
-  // 시리얼 검증
+  // QR 검증
   const [serialInput, setSerialInput] = useState('');
 
-  // 펀드 지표 상태
+  // 펀드
   const [fundNews, setFundNews] = useState('');
   const [fundHint, setFundHint] = useState('');
   const [posScore, setPosScore] = useState(0);
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
 
-  // 1. 송금/출금 대기열 승인 및 거절
+  // 승인/거절
   const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean) => {
     if (!supabase) return;
     await supabase.from('transactions').update({ status }).eq('id', tId);
@@ -74,7 +73,7 @@ export default function AdminPanel({
     if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절'}] 처리되었습니다.`);
   };
 
-  // 2. 상/벌금 개별 부여 (국고 연동)
+  // 상/벌금 실행
   const handleRewardPenalty = async () => {
     if (!supabase) return;
     const amt = parseInt(rewardAmt);
@@ -92,7 +91,7 @@ export default function AdminPanel({
     if (showAlert) showAlert(`🏆 ${rewardTarget} 대원에게 ${rewardType} ${amt}안 반영 완료!`);
   };
 
-  // 3. 주급 일괄 지급 및 자동 징수
+  // 주급 일괄 지급
   const handlePaySalaries = async () => {
     if (!supabase) return;
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
@@ -119,10 +118,10 @@ export default function AdminPanel({
     }
     if (rows.length > 0) await supabase.from('transactions').insert(rows);
     if (loadData) await loadData();
-    if (showAlert) showAlert('💸 전 대원 주급 지급 및 세금/대출 자동 정산이 완료되었습니다!');
+    if (showAlert) showAlert('💸 전 대원 주급 지급 및 자동 징수가 완료되었습니다!');
   };
 
-  // 4. 특례 대출 발급
+  // 대출 발급
   const handleIssueLoan = async () => {
     if (!supabase) return;
     const amt = parseInt(loanAmt);
@@ -147,17 +146,17 @@ export default function AdminPanel({
     if (showAlert) showAlert(`✅ ${loanTarget} 대원에게 ${amt}안 대출을 발급했습니다.`);
   };
 
-  // 5. 일괄 대출 이자율 변경
+  // 일괄 이율
   const handleUpdateGlobalRate = async () => {
     if (!supabase) return;
     const rate = parseFloat(globalLoanRate);
     await supabase.from('system_config').upsert({ key: 'weekly_loan_rate', value: String(rate) }, { onConflict: 'key' });
     await supabase.from('users').update({ individual_rate: 0 }).neq('id', 0);
     if (loadData) await loadData();
-    if (showAlert) showAlert(`✅ 일괄 이율 ${rate}%가 적용되었으며 개별 이율은 초기화되었습니다.`);
+    if (showAlert) showAlert(`✅ 일괄 이율 ${rate}%가 적용되었습니다.`);
   };
 
-  // 6. 부동산 임대료 일괄 징수 및 시즌 재산정
+  // 임대료 징수 및 재산정
   const handleCollectRent = async () => {
     if (!supabase) return;
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
@@ -185,7 +184,7 @@ export default function AdminPanel({
     if (showAlert) showAlert('🔄 거품 방지 공식이 적용되어 모든 좌석의 새 시즌 가격이 책정되었습니다.');
   };
 
-  // 7. 만기 예금 일괄 지급
+  // 만기 예금 일괄 지급
   const handleMatureAllDeposits = async () => {
     if (!supabase) return;
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
@@ -215,7 +214,7 @@ export default function AdminPanel({
     if (showAlert) showAlert('💰 만기 도래 예금의 원리금 지급 및 세금 원천징수가 완료되었습니다!');
   };
 
-  // 8. 신규 상점 상품 등록
+  // 신규 상품 등록
   const handleRegisterShopItem = async () => {
     if (!supabase) return;
     if (!newItemName.trim() || !newItemPrice) { if (showAlert) showAlert('⚠️ 상품명과 가격을 입력하세요.'); return; }
@@ -229,7 +228,7 @@ export default function AdminPanel({
     if (showAlert) showAlert('🛍️ 새 상품이 상점에 정상 등록되었습니다.');
   };
 
-  // 9. QR 시리얼 검증
+  // QR 검증
   const handleVerifySerial = async () => {
     if (!supabase || !serialInput.trim()) return;
     const { data: inv } = await supabase.from('inventory').select('*').eq('serial', serialInput.trim().toUpperCase()).single();
@@ -242,7 +241,7 @@ export default function AdminPanel({
     if (showAlert) showAlert(`✅ [${inv.name}] 대원의 [${inv.item_name}] 사용 처리가 확정되었습니다!`);
   };
 
-  // 10. 펀드 지수 업데이트 및 일괄 가입
+  // 펀드 업데이트 및 일괄 가입
   const handleUpdateFundIndex = async () => {
     if (!supabase) return;
     const current = Number(fundData?.current_index || 1000);
@@ -273,13 +272,11 @@ export default function AdminPanel({
     if (showAlert) showAlert(`🚀 ${rows.length / 2}명의 대원이 펀드에 자동 가입되었습니다!`);
   };
 
-  // 국고 및 통화량 안전 계산
   const treasuryBal = safeTrans.filter((t: any) => t && t.name === '국고(중앙은행)' && t.status === 'Success').reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
   const totalMoneySupply = safeTrans.filter((t: any) => t && t.name !== '국고(중앙은행)' && t.status !== 'Rejected' && t.status !== 'Deposit_Active').reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
-      {/* 헤더 */}
       <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 flex justify-between items-center max-w-5xl mx-auto">
         <div className="flex items-center gap-2">
           <span className="text-2xl">👨‍🏫</span>
@@ -294,7 +291,7 @@ export default function AdminPanel({
       </header>
 
       <main className="max-w-5xl mx-auto p-4 space-y-5">
-        {/* 네비게이션 탭 */}
+        {/* 11개 탭 목록 전체 복원 */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
           {[
             { id: 'pending', label: '🔔 승인대기' },
@@ -315,11 +312,11 @@ export default function AdminPanel({
           ))}
         </div>
 
-        {/* 1. 승인 대기 */}
+        {/* 1. 승인대기 */}
         {adminTab === 'pending' && (
           <div className="space-y-4">
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-              <h3 className="font-bold text-sm text-yellow-400">👤 회원가입 대기</h3>
+              <h3 className="font-bold text-sm text-yellow-400">👤 회원가입 승인 대기</h3>
               {safeUsers.filter((u: any) => u && u.status === 'Pending').length === 0 ? <p className="text-xs text-slate-500 py-2">대기 중인 가입 신청이 없습니다.</p> : safeUsers.filter((u: any) => u && u.status === 'Pending').map((u: any) => (
                 <div key={u.id} className="bg-slate-950 p-3 rounded-xl flex justify-between items-center border border-slate-800 text-xs">
                   <span>{u.name} 대원</span>
@@ -329,7 +326,7 @@ export default function AdminPanel({
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-              <h3 className="font-bold text-sm text-yellow-400">🏧 현금 출금 대기</h3>
+              <h3 className="font-bold text-sm text-yellow-400">🏧 현금 출금 승인 대기</h3>
               {safeTrans.filter((t: any) => t && t.status === 'Pending_W').length === 0 ? <p className="text-xs text-slate-500 py-2">대기 중인 출금 요청이 없습니다.</p> : safeTrans.filter((t: any) => t && t.status === 'Pending_W').map((t: any) => (
                 <div key={t.id} className="bg-slate-950 p-3 rounded-xl flex justify-between items-center border border-slate-800 text-xs">
                   <div><p className="font-bold">{t.name}</p><p className="text-slate-400">출금 요청: {Math.abs(t.amount)}안</p></div>
@@ -363,7 +360,7 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 3. 주급 일괄 지급 */}
+        {/* 3. 주급정산 */}
         {adminTab === 'salary' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
             <h3 className="font-bold text-sm text-indigo-400">💰 전 대원 주급 자동 정산기</h3>
@@ -376,7 +373,7 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 4. 대출 / 독촉 관리 */}
+        {/* 4. 대출/독촉 */}
         {adminTab === 'loans' && (
           <div className="space-y-4">
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
@@ -541,8 +538,8 @@ export default function AdminPanel({
                 await supabase.from('system_config').upsert({ key: 'deposit_open', value: next }, { onConflict: 'key' });
                 if (setDepositOpen) setDepositOpen(!depositOpen);
                 if (loadData) await loadData();
-                if (showAlert) showAlert(depositOpen ? '창구 닫힘' : '창구 열림');
-              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600' : 'bg-slate-800 text-slate-400'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
+                if (showAlert) showAlert(depositOpen ? '🔒 예금 창구가 닫혔습니다.' : '🟢 예금 창구가 열렸습니다.');
+              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
             </div>
           </div>
         )}
