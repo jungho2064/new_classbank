@@ -356,6 +356,11 @@ export default function AdminPanel({
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
+      {showAlert && (
+        <div className="fixed top-4 left-0 right-0 max-w-sm mx-auto px-4 z-[9999] pointer-events-none">
+          {/* 부모 App에서 넘겨받은 alertMsg 표시 */}
+        </div>
+      )}
       <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 flex justify-between items-center max-w-5xl mx-auto">
         <div className="flex items-center gap-2">
           <span className="text-2xl">👨‍🏫</span>
