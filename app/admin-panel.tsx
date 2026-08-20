@@ -6,7 +6,7 @@ import {
   Store, ListFilter, Settings, QrCode, TrendingUp, LogOut, Check, X, RefreshCw
 } from 'lucide-react';
 
-export default function AdminPanel({ supabase, userList, transactions, seats, fundData, isFrozen, depositOpen, loadData, showAlert, onLogout }: any) {
+export default function AdminPanel({ supabase, userList, transactions, seats, fundData, isFrozen, depositOpen, setDepositOpen, loadData, showAlert, onLogout }: any) {
   const [adminTab, setAdminTab] = useState<'pending' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'audit' | 'qr' | 'funds' | 'system'>('pending');
 
   // 상/벌금 폼 상태
