@@ -361,7 +361,7 @@ export default function AdminPanel({
                   <div><p className="font-bold">{t.name}</p><p className="text-slate-400">출금 요청: {Math.abs(t.amount)}안</p></div>
                   <div className="flex gap-2">
                     <button onClick={() => handleResolvePending(t.id, 'Success', t.name, true)} className="bg-emerald-600 px-3 py-1.5 rounded-lg font-bold">승인</button>
-                    <button onClick={() => handleResolvePending(t.id, 'Rejected', t.name, true)} className="bg-rose-600 px-3 py-1.5 rounded-lg font-bold">거절</button>
+                    <button onClick={() => handleResolvePending(t.id, 'Rejected', t.name, true, t.amount)} className="bg-rose-600 px-3 py-1.5 rounded-lg font-bold">거절</button>
                   </div>
                 </div>
               ))}
