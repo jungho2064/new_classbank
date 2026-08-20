@@ -60,15 +60,13 @@ export default function AdminPanel({
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
 
-  // 승인/거절 핸들러 (최종 완성본)
+  // 승인/거절 핸들러 (환불 시 +금액 기록)
   const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
     if (!supabase) return;
 
-    // 1. 기존 출금 신청 내역의 상태를 처리 (출금 거절이면 'Rejected_W'로 변경)
     const targetStatus = (isWithdrawal && status === 'Rejected') ? 'Rejected_W' : status;
     await supabase.from('transactions').update({ status: targetStatus }).eq('id', tId);
-    
-    // 2. 출금 거절 시 +환불금액을 새로 장부에 추가!
+
     if (status === 'Rejected') {
       const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
       const refundAmt = Math.abs(Number(amount || 0));
@@ -79,7 +77,7 @@ export default function AdminPanel({
             date: nowStr,
             name,
             type: '출금 반려 환불',
-            amount: refundAmt, // 👈 장부에 +800안 찍히고 실제로 입금됨!
+            amount: refundAmt,
             note: '현금 출금 요청 반려로 인한 잔액 환불',
             status: 'Success'
           }
@@ -102,19 +100,18 @@ export default function AdminPanel({
     if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (환불 완료)'}] 처리되었습니다.`);
   };
 
-  // 상/벌금 실행 (실시간 DB 검증 및 자동 대출 전환)
+  // 상/벌금 실행 (실시간 DB 잔액 검증 및 자동 대출 전환)
   const handleRewardPenalty = async () => {
     if (!supabase) return;
     const amt = parseInt(rewardAmt);
-    if (!rewardTarget || isNaN(amt) || amt <= 0) { 
-      if (showAlert) showAlert('⚠️ 대상과 금액을 확인하세요.'); 
-      return; 
+    if (!rewardTarget || isNaN(amt) || amt <= 0) {
+      if (showAlert) showAlert('⚠️ 대상과 금액을 확인하세요.');
+      return;
     }
 
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 
     if (rewardType === '벌금(-)') {
-      // 💡 DB에서 해당 학생의 유효한 거래내역만 즉시 불러와 정확한 실시간 잔액 계산
       const { data: userTrans } = await supabase
         .from('transactions')
         .select('amount')
@@ -124,49 +121,31 @@ export default function AdminPanel({
 
       const targetBalance = (userTrans || []).reduce((a, c) => a + Number(c.amount || 0), 0);
 
-      // 잔액이 부과할 벌금보다 적을 경우 (대출 자동 전환 프로세스)
       if (targetBalance < amt) {
-        const shortage = amt - targetBalance; // 부족한 금액
+        const shortage = amt - targetBalance;
         const { data: targetUser } = await supabase.from('users').select('loan_balance').eq('name', rewardTarget).single();
-        
+
         if (targetBalance > 0) {
-          // 1. 가진 돈이 1원이라도 있으면 모두 징수
           await supabase.from('transactions').insert([
             { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: -targetBalance, note: `${rewardReason || '벌금'} (가진 돈 전액 징수)`, status: 'Success' },
             { date: nowStr, name: '국고(중앙은행)', type: '벌금 수입', amount: targetBalance, note: `${rewardTarget} 벌금`, status: 'Success' }
           ]);
         } else {
-          // 2. 이미 잔액이 0원이면 장부에 알림 기록만 추가 (마이너스 결제 방지)
           await supabase.from('transactions').insert([
             { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: 0, note: `${rewardReason || '벌금'} (잔액 부족으로 전액 대출 전환)`, status: 'System' }
           ]);
         }
-        
-        // 3. 모자란 돈은 대출 잔액으로 가산하고 독촉장 ON
+
         const newLoan = Number(targetUser?.loan_balance || 0) + shortage;
         await supabase.from('users').update({ loan_balance: newLoan, dunning: 'ON' }).eq('name', rewardTarget);
-        
+
         setRewardAmt(''); setRewardReason('');
         if (loadData) await loadData();
         if (showAlert) showAlert(`⚠️ 잔액 부족! 모자란 ${shortage}안이 대출로 강제 전환되었습니다.`);
-        return; // 👈 여기서 함수를 반드시 종료하여 정상 결제 로직으로 넘어가지 않게 차단
+        return;
       }
     }
-    
-    // 정상적으로 잔액이 충분하거나 상금(+)일 때
-    const isReward = rewardType === '상금(+)';
-    const val = isReward ? amt : -amt;
 
-    await supabase.from('transactions').insert([
-      { date: nowStr, name: rewardTarget, type: rewardType, amount: val, note: rewardReason || '선생님 재량', status: 'Success' },
-      { date: nowStr, name: '국고(중앙은행)', type: isReward ? '정부 지출' : '벌금 수입', amount: -val, note: `${rewardTarget} ${rewardType}`, status: 'Success' }
-    ]);
-    setRewardAmt(''); setRewardReason('');
-    if (loadData) await loadData();
-    if (showAlert) showAlert(`🏆 ${rewardTarget} 대원에게 ${rewardType} ${amt}안 반영 완료!`);
-  };
-    
-    // 정상적으로 잔액이 충분하거나 상금일 때
     const isReward = rewardType === '상금(+)';
     const val = isReward ? amt : -amt;
 
@@ -213,7 +192,10 @@ export default function AdminPanel({
   const handleIssueLoan = async () => {
     if (!supabase) return;
     const amt = parseInt(loanAmt);
-    if (!loanTarget || isNaN(amt) || amt <= 0) { if (showAlert) showAlert('⚠️ 학생과 대출금을 확인하세요.'); return; }
+    if (!loanTarget || isNaN(amt) || amt <= 0) {
+      if (showAlert) showAlert('⚠️ 학생과 대출금을 확인하세요.');
+      return;
+    }
     const targetUser = safeUsers.find((u: any) => u.name === loanTarget);
     if (!targetUser) return;
     const newLoan = Number(targetUser.loan_balance || 0) + amt;
@@ -305,7 +287,10 @@ export default function AdminPanel({
   // 신규 상품 등록
   const handleRegisterShopItem = async () => {
     if (!supabase) return;
-    if (!newItemName.trim() || !newItemPrice) { if (showAlert) showAlert('⚠️ 상품명과 가격을 입력하세요.'); return; }
+    if (!newItemName.trim() || !newItemPrice) {
+      if (showAlert) showAlert('⚠️ 상품명과 가격을 입력하세요.');
+      return;
+    }
     await supabase.from('shop_items').insert([{
       item_id: `I_${Date.now()}`, name: newItemName.trim(), price: parseInt(newItemPrice),
       stock: parseInt(newItemStock || '10'), max_per_user: parseInt(newItemMax || '1'),
@@ -320,8 +305,14 @@ export default function AdminPanel({
   const handleVerifySerial = async () => {
     if (!supabase || !serialInput.trim()) return;
     const { data: inv } = await supabase.from('inventory').select('*').eq('serial', serialInput.trim().toUpperCase()).single();
-    if (!inv) { if (showAlert) showAlert('❌ 등록되지 않은 시리얼 번호입니다.'); return; }
-    if (inv.status === 'Used') { if (showAlert) showAlert('⚠️ 이미 사용이 완료된 쿠폰입니다.'); return; }
+    if (!inv) {
+      if (showAlert) showAlert('❌ 등록되지 않은 시리얼 번호입니다.');
+      return;
+    }
+    if (inv.status === 'Used') {
+      if (showAlert) showAlert('⚠️ 이미 사용이 완료된 쿠폰입니다.');
+      return;
+    }
 
     await supabase.from('inventory').update({ status: 'Used' }).eq('id', inv.id);
     setSerialInput('');
