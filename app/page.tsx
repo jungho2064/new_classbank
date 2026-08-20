@@ -265,11 +265,6 @@ export default function App() {
   if (loginMode === 'None') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4 relative">
-        {alertMsg && (
-          <div className="fixed top-6 left-0 right-0 max-w-xs mx-auto z-9999 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
-            {alertMsg}
-          </div>
-        )}
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-7 shadow-2xl space-y-6">
           <div className="text-center space-y-1">
             <div className="text-4xl mb-1">🚀</div>
@@ -314,6 +309,18 @@ export default function App() {
                 <button onClick={() => setShowAdminModal(false)} className="flex-1 bg-slate-800 py-2 rounded-xl text-xs">취소</button>
                 <button onClick={() => { if (adminPwInput === 'admin1234' || adminPwInput === '1234') { setLoginMode('Admin'); setShowAdminModal(false); } else showAlert('비밀번호 불일치'); }} className="flex-1 bg-indigo-600 py-2 rounded-xl text-xs font-bold">접속</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 팝업 모달 뒤에 배치하여 블러 암막 위로 선명하게 표시 */}
+        {alertMsg && (
+          <div 
+            style={{ zIndex: 99999 }} 
+            className="fixed top-8 left-0 right-0 max-w-xs mx-auto pointer-events-none px-4"
+          >
+            <div className="bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl border border-indigo-400">
+              {alertMsg}
             </div>
           </div>
         )}
