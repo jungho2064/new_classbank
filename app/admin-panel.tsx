@@ -60,26 +60,30 @@ export default function AdminPanel({
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
 
-  // 승인/거절 핸들러 (0안 기록으로 이중 환불 방지)
-  const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean) => {
-    if (!supabase) return;
-    await supabase.from('transactions').update({ status }).eq('id', tId);
-    if (status === 'Rejected') {
-      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-      await supabase.from('transactions').insert([
-        { 
-          date: nowStr, 
-          name, 
-          type: isWithdrawal ? '출금 반려' : '송금 반려', 
-          amount: 0, 
-          note: isWithdrawal ? '현금 출금 요청 반려 (잔액 자동 복구)' : '관리자 반려 처리', 
-          status: 'System' 
-        }
-      ]);
-    }
-    if (loadData) await loadData();
-    if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (잔액 복구)'}] 처리되었습니다.`);
-  };
+  // 승인/거절 핸들러 (실제 환불액 + 기록)
+const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
+  if (!supabase) return;
+  await supabase.from('transactions').update({ status }).eq('id', tId);
+  
+  if (status === 'Rejected') {
+    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const refundAmt = Math.abs(Number(amount || 0));
+
+    await supabase.from('transactions').insert([
+      {
+        date: nowStr,
+        name,
+        type: isWithdrawal ? '출금 반려 환불' : '송금 반려',
+        amount: isWithdrawal ? refundAmt : 0, // 👈 출금 반려 시 +800으로 기록
+        note: isWithdrawal ? '현금 출금 요청 반려로 인한 환불' : '관리자 반려 처리',
+        status: isWithdrawal ? 'Success' : 'System'
+      }
+    ]);
+  }
+
+  if (loadData) await loadData();
+  if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (환불 완료)'}] 처리되었습니다.`);
+};
 
   // 상/벌금 실행
   const handleRewardPenalty = async () => {
