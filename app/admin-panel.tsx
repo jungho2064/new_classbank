@@ -506,12 +506,23 @@ export default function AdminPanel({ supabase, userList, transactions, seats, fu
             </div>
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
               <div><p className="font-bold text-sm">🏦 정기예금 가입 창구</p><p className="text-xs text-slate-400">정기예금 신규 가입 허용 여부</p></div>
-              <button onClick={async () => {
-                const next = depositOpen ? 'FALSE' : 'TRUE';
-                await supabase.from('system_config').upsert({ key: 'deposit_open', value: next });
-                await loadData();
-                showAlert(depositOpen ? '창구 닫힘' : '창구 열림');
-              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600' : 'bg-slate-800 text-slate-400'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
+              <button 
+  onClick={async () => {
+    const nextVal = depositOpen ? 'FALSE' : 'TRUE';
+    
+    // DB 업데이트
+    await supabase.from('system_config').upsert({ key: 'deposit_open', value: nextVal }, { onConflict: 'key' });
+    
+    // UI 즉시 동기화
+    if (setDepositOpen) setDepositOpen(!depositOpen);
+    await loadData();
+    
+    showAlert(depositOpen ? '🔒 정기예금 창구가 닫혔습니다.' : '🟢 정기예금 창구가 열렸습니다.');
+  }} 
+  className={`px-4 py-2 rounded-xl text-xs font-bold transition ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+>
+  {depositOpen ? '창구 ON' : '창구 OFF'}
+</button>
             </div>
           </div>
         )}
