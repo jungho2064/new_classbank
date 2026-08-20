@@ -156,6 +156,7 @@ export default function App() {
   const handleWithdraw = async () => {
     const amt = parseInt(withdrawAmt);
     if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 금액을 확인하세요.'); return; }
+    if (myBalance < amt) { showAlert('❌ 출금 신청 금액이 보유 잔액보다 많습니다.'); return; }
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '현금 출금', amount: -amt, note: '사전 신청', status: 'Pending_W' }]);
     setWithdrawAmt(''); setWithdrawPw(''); setActiveTab('wallet');
@@ -230,6 +231,7 @@ export default function App() {
 
   const handleBuyItem = async (item: any) => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 상점을 이용할 수 없습니다.'); return; }
+    if (myBalance < item.price) { showAlert('❌ 잔액이 부족하여 아이템을 구매할 수 없습니다.'); return; }
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     const serial = 'SN-' + Math.floor(100000 + Math.random() * 900000);
     await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' }]);
