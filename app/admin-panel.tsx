@@ -60,30 +60,47 @@ export default function AdminPanel({
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
 
-  // 승인/거절 핸들러 (실제 환불액 + 기록)
-const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
-  if (!supabase) return;
-  await supabase.from('transactions').update({ status }).eq('id', tId);
-  
-  if (status === 'Rejected') {
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const refundAmt = Math.abs(Number(amount || 0));
+  // 승인/거절 핸들러 (최종 완성본)
+  const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
+    if (!supabase) return;
 
-    await supabase.from('transactions').insert([
-      {
-        date: nowStr,
-        name,
-        type: isWithdrawal ? '출금 반려 환불' : '송금 반려',
-        amount: isWithdrawal ? refundAmt : 0, // 👈 출금 반려 시 +800으로 기록
-        note: isWithdrawal ? '현금 출금 요청 반려로 인한 환불' : '관리자 반려 처리',
-        status: isWithdrawal ? 'Success' : 'System'
+    // 1. 기존 출금 신청 내역의 상태를 처리 (출금 거절이면 'Rejected_W'로 변경)
+    const targetStatus = (isWithdrawal && status === 'Rejected') ? 'Rejected_W' : status;
+    await supabase.from('transactions').update({ status: targetStatus }).eq('id', tId);
+    
+    // 2. 출금 거절 시 +환불금액을 새로 장부에 추가!
+    if (status === 'Rejected') {
+      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const refundAmt = Math.abs(Number(amount || 0));
+
+      if (isWithdrawal && refundAmt > 0) {
+        await supabase.from('transactions').insert([
+          {
+            date: nowStr,
+            name,
+            type: '출금 반려 환불',
+            amount: refundAmt, // 👈 장부에 +800안 찍히고 실제로 입금됨!
+            note: '현금 출금 요청 반려로 인한 잔액 환불',
+            status: 'Success'
+          }
+        ]);
+      } else {
+        await supabase.from('transactions').insert([
+          {
+            date: nowStr,
+            name,
+            type: '송금 반려',
+            amount: 0,
+            note: '관리자 반려 처리',
+            status: 'System'
+          }
+        ]);
       }
-    ]);
-  }
+    }
 
-  if (loadData) await loadData();
-  if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (환불 완료)'}] 처리되었습니다.`);
-};
+    if (loadData) await loadData();
+    if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (환불 완료)'}] 처리되었습니다.`);
+  };
 
   // 상/벌금 실행
   const handleRewardPenalty = async () => {
