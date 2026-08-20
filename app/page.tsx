@@ -35,6 +35,7 @@ export default function App() {
   const [seats, setSeats] = useState<any[]>([]);
   const [fundData, setFundData] = useState<any>(null);
   const [isFrozen, setIsFrozen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(true);
   const [notice, setNotice] = useState('');
 
   const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'settings' | 'store' | 'bag' | 'fund'>('wallet');
