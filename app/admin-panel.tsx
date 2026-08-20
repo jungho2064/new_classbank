@@ -60,37 +60,26 @@ export default function AdminPanel({
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
 
-  // 1. 송금/출금 대기열 승인 및 거절 핸들러
-const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
-  if (!supabase) return;
-
-  // 기존 신청 내역의 상태 변경
-  await supabase.from('transactions').update({ status }).eq('id', tId);
-
-  // 반려(거절) 처리 시
-  if (status === 'Rejected') {
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const refundAmt = Math.abs(Number(amount || 0));
-
-    // 출금 반려일 경우: 빠져나갔던 금액을 학생 계좌로 환불 입금(+refundAmt)
-    // 반려(거절) 처리 시
-  if (status === 'Rejected') {
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await supabase.from('transactions').insert([
-      {
-        date: nowStr,
-        name,
-        type: isWithdrawal ? '출금 반려' : '송금 반려',
-        amount: 0,
-        note: isWithdrawal ? '현금 출금 요청 반려 (잔액 자동 복구)' : '관리자 반려 처리',
-        status: 'System'
-      }
-    ]);
-  }
-
-  if (loadData) await loadData();
-  if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 및 환불'}] 처리되었습니다.`);
-};
+  // 승인/거절 핸들러 (0안 기록으로 이중 환불 방지)
+  const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean) => {
+    if (!supabase) return;
+    await supabase.from('transactions').update({ status }).eq('id', tId);
+    if (status === 'Rejected') {
+      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      await supabase.from('transactions').insert([
+        { 
+          date: nowStr, 
+          name, 
+          type: isWithdrawal ? '출금 반려' : '송금 반려', 
+          amount: 0, 
+          note: isWithdrawal ? '현금 출금 요청 반려 (잔액 자동 복구)' : '관리자 반려 처리', 
+          status: 'System' 
+        }
+      ]);
+    }
+    if (loadData) await loadData();
+    if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (잔액 복구)'}] 처리되었습니다.`);
+  };
 
   // 상/벌금 실행
   const handleRewardPenalty = async () => {
@@ -165,7 +154,7 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
     if (showAlert) showAlert(`✅ ${loanTarget} 대원에게 ${amt}안 대출을 발급했습니다.`);
   };
 
-  // 일괄 이율
+  // 일괄 이율 설정
   const handleUpdateGlobalRate = async () => {
     if (!supabase) return;
     const rate = parseFloat(globalLoanRate);
@@ -310,7 +299,7 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
       </header>
 
       <main className="max-w-5xl mx-auto p-4 space-y-5">
-        {/* 11개 탭 목록 전체 복원 */}
+        {/* 11개 탭 네비게이션 */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
           {[
             { id: 'pending', label: '🔔 승인대기' },
@@ -351,7 +340,7 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
                   <div><p className="font-bold">{t.name}</p><p className="text-slate-400">출금 요청: {Math.abs(t.amount)}안</p></div>
                   <div className="flex gap-2">
                     <button onClick={() => handleResolvePending(t.id, 'Success', t.name, true)} className="bg-emerald-600 px-3 py-1.5 rounded-lg font-bold">승인</button>
-                    <button onClick={() => handleResolvePending(t.id, 'Rejected', t.name, true, t.amount)} className="bg-rose-600 px-3 py-1.5 rounded-lg font-bold">거절 (환불)</button>
+                    <button onClick={() => handleResolvePending(t.id, 'Rejected', t.name, true)} className="bg-rose-600 px-3 py-1.5 rounded-lg font-bold">거절</button>
                   </div>
                 </div>
               ))}
@@ -522,74 +511,72 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
           </div>
         )}
 
-        {/* 10. 전체 장부 감사 */}
+        {/* 10. 전체 장부 감사 (학생/국고 분리) */}
         {adminTab === 'audit' && (
-  <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-    <div className="flex flex-col md:flex-row justify-between md:items-center gap-2">
-      <h3 className="font-bold text-sm text-indigo-400">📜 거래 장부 감사(Audit)</h3>
-      
-      {/* 👈 장부 분리 필터 버튼 */}
-      <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-        <button 
-          onClick={() => setAuditFilter('student')} 
-          className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'student' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-        >
-          👤 학생 거래 장부
-        </button>
-        <button 
-          onClick={() => setAuditFilter('treasury')} 
-          className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'treasury' ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
-        >
-          🏛️ 국고(중앙은행) 장부
-        </button>
-        <button 
-          onClick={() => setAuditFilter('all')} 
-          className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
-        >
-          통합 전체 보기
-        </button>
-      </div>
-    </div>
-
-    {/* 장부 목록 렌더링 */}
-    <div className="space-y-1.5 max-h-96 overflow-y-auto">
-      {safeTrans
-        .filter((t: any) => {
-          if (auditFilter === 'student') return t.name !== '국고(중앙은행)';
-          if (auditFilter === 'treasury') return t.name === '국고(중앙은행)';
-          return true;
-        })
-        .map((t: any) => {
-          const isTreasury = t.name === '국고(중앙은행)';
-          return (
-            <div 
-              key={t.id} 
-              className={`p-2.5 rounded-xl border text-[11px] flex justify-between items-center ${
-                isTreasury 
-                  ? 'bg-amber-950/30 border-amber-500/30' 
-                  : 'bg-slate-950 border-slate-800'
-              }`}
-            >
-              <div>
-                <span className={`font-bold ${isTreasury ? 'text-amber-400' : 'text-white'}`}>
-                  {t.name}
-                </span>
-                <span className="text-slate-400 ml-1.5">
-                  [{t.type}] {t.note}
-                </span>
-                <span className="text-slate-500 text-[10px] ml-2">
-                  ({t.date})
-                </span>
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-2">
+              <h3 className="font-bold text-sm text-indigo-400">📜 거래 장부 감사(Audit)</h3>
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                <button 
+                  onClick={() => setAuditFilter('student')} 
+                  className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'student' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+                >
+                  👤 학생 거래 장부
+                </button>
+                <button 
+                  onClick={() => setAuditFilter('treasury')} 
+                  className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'treasury' ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
+                >
+                  🏛️ 국고 장부
+                </button>
+                <button 
+                  onClick={() => setAuditFilter('all')} 
+                  className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
+                >
+                  통합 전체
+                </button>
               </div>
-              <span className={`font-bold ${Number(t.amount || 0) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {Number(t.amount || 0) > 0 ? `+${t.amount}` : t.amount} 안
-              </span>
             </div>
-          );
-        })}
-    </div>
-  </div>
-)}
+
+            <div className="space-y-1.5 max-h-96 overflow-y-auto">
+              {safeTrans
+                .filter((t: any) => {
+                  if (auditFilter === 'student') return t.name !== '국고(중앙은행)';
+                  if (auditFilter === 'treasury') return t.name === '국고(중앙은행)';
+                  return true;
+                })
+                .map((t: any) => {
+                  const isTreasury = t.name === '국고(중앙은행)';
+                  return (
+                    <div 
+                      key={t.id} 
+                      className={`p-2.5 rounded-xl border text-[11px] flex justify-between items-center ${
+                        isTreasury 
+                          ? 'bg-amber-950/30 border-amber-500/30' 
+                          : 'bg-slate-950 border-slate-800'
+                      }`}
+                    >
+                      <div>
+                        <span className={`font-bold ${isTreasury ? 'text-amber-400' : 'text-white'}`}>
+                          {t.name}
+                        </span>
+                        <span className="text-slate-400 ml-1.5">
+                          [{t.type}] {t.note}
+                        </span>
+                        <span className="text-slate-500 text-[10px] ml-2">
+                          ({t.date})
+                        </span>
+                      </div>
+                      <span className={`font-bold ${Number(t.amount || 0) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {Number(t.amount || 0) > 0 ? `+${t.amount}` : t.amount} 안
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
         {/* 11. 시스템 제어 */}
         {adminTab === 'system' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
@@ -601,7 +588,7 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
                 await supabase.from('system_config').upsert({ key: 'is_vacation', value: next }, { onConflict: 'key' });
                 if (loadData) await loadData();
                 if (showAlert) showAlert(isFrozen ? '방학 해제' : '방학 가동');
-              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${isFrozen ? 'bg-rose-600' : 'bg-slate-800 text-slate-400'}`}>{isFrozen ? '동결 ON' : '해제 OFF'}</button>
+              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${isFrozen ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{isFrozen ? '동결 ON' : '해제 OFF'}</button>
             </div>
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
               <div><p className="font-bold text-sm">🏦 정기예금 가입 창구</p><p className="text-xs text-slate-400">정기예금 신규 가입 허용 여부</p></div>
@@ -611,7 +598,7 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
                 if (setDepositOpen) setDepositOpen(!depositOpen);
                 if (loadData) await loadData();
                 if (showAlert) showAlert(depositOpen ? '🔒 예금 창구가 닫혔습니다.' : '🟢 예금 창구가 열렸습니다.');
-              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
+              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
             </div>
           </div>
         )}
