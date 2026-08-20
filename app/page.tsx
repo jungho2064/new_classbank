@@ -179,16 +179,54 @@ export default function App() {
   };
 
   const handleLoanRepay = async () => {
-    const amt = parseInt(repayAmt);
-    if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 금액을 확인하세요.'); return; }
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '자진 대출 상환', amount: -amt, note: '직접 상환', status: 'Success' }]);
-    const nextLoan = Math.max(0, Number(currentUser?.loan_balance || 0) - amt);
-    await supabase!.from('users').update({ loan_balance: nextLoan, dunning: nextLoan === 0 ? '' : currentUser?.dunning }).eq('name', currentUser?.name);
-    setRepayAmt(''); setRepayPw(''); setActiveTab('wallet');
-    await loadData();
-    showAlert(`💸 ${amt}안 대출 상환 완료!`);
-  };
+  const currentLoan = Number(currentUser?.loan_balance || 0);
+
+  // 1. 갚을 대출이 없는 경우
+  if (currentLoan <= 0) {
+    showAlert('🎉 현재 갚아야 할 대출금이 없습니다.');
+    return;
+  }
+
+  const amt = parseInt(repayAmt);
+  if (isNaN(amt) || amt <= 0) { 
+    showAlert('⚠️ 상환할 금액을 정확히 입력하세요.'); 
+    return; 
+  }
+
+  // 2. 대출 잔액보다 더 많이 갚으려고 할 때
+  if (amt > currentLoan) {
+    showAlert(`⚠️ 남은 대출 잔액(${currentLoan}안) 이하로만 상환할 수 있습니다.`);
+    return;
+  }
+
+  // 3. 보유 잔액보다 많이 갚으려고 할 때 (자산 음수 방지)
+  if (myBalance < amt) {
+    showAlert('❌ 통장 잔액이 부족하여 상환할 수 없습니다.');
+    return;
+  }
+
+  if (repayPw !== currentUser?.transfer_password) { 
+    showAlert('❌ 결제용 비밀번호가 일치하지 않습니다.'); 
+    return; 
+  }
+
+  const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  await supabase!.from('transactions').insert([
+    { date: nowStr, name: currentUser?.name, type: '자진 대출 상환', amount: -amt, note: '학생 직접 상환', status: 'Success' },
+    { date: nowStr, name: '국고(중앙은행)', type: '대출금 회수', amount: amt, note: `${currentUser?.name} 상환`, status: 'Success' }
+  ]);
+
+  const nextLoan = Math.max(0, currentLoan - amt);
+  await supabase!.from('users').update({ 
+    loan_balance: nextLoan, 
+    weekly_repay: nextLoan === 0 ? 0 : currentUser?.weekly_repay,
+    dunning: nextLoan === 0 ? '' : currentUser?.dunning 
+  }).eq('name', currentUser?.name);
+
+  setRepayAmt(''); setRepayPw(''); setActiveTab('wallet');
+  await loadData();
+  showAlert(`💸 ${amt}안 대출 상환이 완료되었습니다! (남은 대출: ${nextLoan}안)`);
+};
 
   const handleBuyItem = async (item: any) => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 상점을 이용할 수 없습니다.'); return; }
@@ -382,14 +420,55 @@ export default function App() {
         )}
 
         {activeTab === 'loan' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
-            <div className="flex justify-between items-center"><h2 className="font-bold text-rose-400 text-sm">대출금 상환</h2><button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button></div>
-            <div className="p-3 bg-rose-950/40 rounded-xl text-center font-bold text-rose-400 text-base">남은 대출: {currentUser?.loan_balance} 안</div>
-            <input type="number" placeholder="상환 금액" value={repayAmt} onChange={e => setRepayAmt(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
-            <input type="password" placeholder="비밀번호" value={repayPw} onChange={e => setRepayPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
-            <button onClick={handleLoanRepay} className="w-full bg-rose-600 py-3 rounded-xl font-bold">상환하기</button>
-          </div>
-        )}
+  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+    <div className="flex justify-between items-center">
+      <h2 className="font-bold text-rose-400 text-sm flex items-center gap-2">
+        <AlertTriangle size={16} /> 대출금 상환
+      </h2>
+      <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5">
+        <ChevronLeft size={14} /> 뒤로가기
+      </button>
+    </div>
+
+    {/* 대출 잔액이 0원 이하일 때 */}
+    {Number(currentUser?.loan_balance || 0) <= 0 ? (
+      <div className="p-8 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
+        <p className="text-3xl">🎉</p>
+        <p className="text-sm font-bold text-emerald-400">현재 갚아야 할 대출이 없습니다!</p>
+        <p className="text-xs text-slate-500">대출금이 발생하면 이곳에서 자진 상환할 수 있습니다.</p>
+      </div>
+    ) : (
+      /* 대출 잔액이 있을 때 상환 폼 */
+      <>
+        <div className="p-4 bg-rose-950/40 rounded-xl text-center border border-rose-500/20">
+          <p className="text-xs text-rose-300">현재 남은 대출 잔액</p>
+          <p className="text-2xl font-black text-rose-400">{currentUser?.loan_balance} 안</p>
+        </div>
+        <div className="space-y-2 text-xs">
+          <label className="block text-slate-400">상환할 금액 (최대 {currentUser?.loan_balance}안)</label>
+          <input 
+            type="number" 
+            placeholder="금액 입력" 
+            value={repayAmt} 
+            onChange={e => setRepayAmt(e.target.value)} 
+            className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-white"
+          />
+          <label className="block text-slate-400 pt-1">결제용 2차 비밀번호</label>
+          <input 
+            type="password" 
+            placeholder="••••" 
+            value={repayPw} 
+            onChange={e => setRepayPw(e.target.value)} 
+            className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-white"
+          />
+        </div>
+        <button onClick={handleLoanRepay} className="w-full bg-rose-600 hover:bg-rose-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">
+          대출금 상환하기
+        </button>
+      </>
+    )}
+  </div>
+)}
 
         {activeTab === 'payslip' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
