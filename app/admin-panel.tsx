@@ -73,30 +73,19 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
     const refundAmt = Math.abs(Number(amount || 0));
 
     // 출금 반려일 경우: 빠져나갔던 금액을 학생 계좌로 환불 입금(+refundAmt)
-    if (isWithdrawal && refundAmt > 0) {
-      await supabase.from('transactions').insert([
-        { 
-          date: nowStr, 
-          name, 
-          type: '출금 반려 환불', 
-          amount: refundAmt, 
-          note: '현금 출금 요청 반려로 인한 환불', 
-          status: 'Success' 
-        }
-      ]);
-    } else {
-      // 송금 반려 기록
-      await supabase.from('transactions').insert([
-        { 
-          date: nowStr, 
-          name, 
-          type: '송금 반려', 
-          amount: 0, 
-          note: '관리자 반려 처리', 
-          status: 'System' 
-        }
-      ]);
-    }
+    // 반려(거절) 처리 시
+  if (status === 'Rejected') {
+    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    await supabase.from('transactions').insert([
+      {
+        date: nowStr,
+        name,
+        type: isWithdrawal ? '출금 반려' : '송금 반려',
+        amount: 0,
+        note: isWithdrawal ? '현금 출금 요청 반려 (잔액 자동 복구)' : '관리자 반려 처리',
+        status: 'System'
+      }
+    ]);
   }
 
   if (loadData) await loadData();
