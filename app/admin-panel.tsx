@@ -102,43 +102,69 @@ export default function AdminPanel({
     if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (환불 완료)'}] 처리되었습니다.`);
   };
 
-  // 상/벌금 실행
-  // 상/벌금 실행
+  // 상/벌금 실행 (실시간 DB 검증 및 자동 대출 전환)
   const handleRewardPenalty = async () => {
     if (!supabase) return;
     const amt = parseInt(rewardAmt);
-    if (!rewardTarget || isNaN(amt) || amt <= 0) { if (showAlert) showAlert('⚠️ 대상과 금액을 확인하세요.'); return; }
+    if (!rewardTarget || isNaN(amt) || amt <= 0) { 
+      if (showAlert) showAlert('⚠️ 대상과 금액을 확인하세요.'); 
+      return; 
+    }
 
-    // 💡 시간을 계산하는 코드를 맨 위로 올렸습니다!
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 
     if (rewardType === '벌금(-)') {
-      const targetBalance = safeTrans
-        .filter((t: any) => t && t.name === rewardTarget && t.status !== 'Rejected' && t.status !== 'Deposit_Active')
-        .reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
+      // 💡 DB에서 해당 학생의 유효한 거래내역만 즉시 불러와 정확한 실시간 잔액 계산
+      const { data: userTrans } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('name', rewardTarget)
+        .neq('status', 'System')
+        .neq('status', 'Deposit_Active');
 
+      const targetBalance = (userTrans || []).reduce((a, c) => a + Number(c.amount || 0), 0);
+
+      // 잔액이 부과할 벌금보다 적을 경우 (대출 자동 전환 프로세스)
       if (targetBalance < amt) {
         const shortage = amt - targetBalance; // 부족한 금액
-        const targetUser = safeUsers.find((u: any) => u.name === rewardTarget);
+        const { data: targetUser } = await supabase.from('users').select('loan_balance').eq('name', rewardTarget).single();
         
-        // 1. 잔액만큼만 벌금 징수 (잔액 0원 처리)
         if (targetBalance > 0) {
+          // 1. 가진 돈이 1원이라도 있으면 모두 징수
           await supabase.from('transactions').insert([
-            { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: -targetBalance, note: `${rewardReason} (잔액 전액 징수)`, status: 'Success' },
+            { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: -targetBalance, note: `${rewardReason || '벌금'} (가진 돈 전액 징수)`, status: 'Success' },
             { date: nowStr, name: '국고(중앙은행)', type: '벌금 수입', amount: targetBalance, note: `${rewardTarget} 벌금`, status: 'Success' }
+          ]);
+        } else {
+          // 2. 이미 잔액이 0원이면 장부에 알림 기록만 추가 (마이너스 결제 방지)
+          await supabase.from('transactions').insert([
+            { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: 0, note: `${rewardReason || '벌금'} (잔액 부족으로 전액 대출 전환)`, status: 'System' }
           ]);
         }
         
-        // 2. 모자란 돈은 대출 잔액으로 자동 전환
-        const newLoan = Number(targetUser.loan_balance || 0) + shortage;
+        // 3. 모자란 돈은 대출 잔액으로 가산하고 독촉장 ON
+        const newLoan = Number(targetUser?.loan_balance || 0) + shortage;
         await supabase.from('users').update({ loan_balance: newLoan, dunning: 'ON' }).eq('name', rewardTarget);
         
         setRewardAmt(''); setRewardReason('');
         if (loadData) await loadData();
-        if (showAlert) showAlert(`⚠️ 잔액 부족으로 ${targetBalance}안 징수 후 모자란 ${shortage}안은 대출로 전환되었습니다.`);
-        return;
+        if (showAlert) showAlert(`⚠️ 잔액 부족! 모자란 ${shortage}안이 대출로 강제 전환되었습니다.`);
+        return; // 👈 여기서 함수를 반드시 종료하여 정상 결제 로직으로 넘어가지 않게 차단
       }
     }
+    
+    // 정상적으로 잔액이 충분하거나 상금(+)일 때
+    const isReward = rewardType === '상금(+)';
+    const val = isReward ? amt : -amt;
+
+    await supabase.from('transactions').insert([
+      { date: nowStr, name: rewardTarget, type: rewardType, amount: val, note: rewardReason || '선생님 재량', status: 'Success' },
+      { date: nowStr, name: '국고(중앙은행)', type: isReward ? '정부 지출' : '벌금 수입', amount: -val, note: `${rewardTarget} ${rewardType}`, status: 'Success' }
+    ]);
+    setRewardAmt(''); setRewardReason('');
+    if (loadData) await loadData();
+    if (showAlert) showAlert(`🏆 ${rewardTarget} 대원에게 ${rewardType} ${amt}안 반영 완료!`);
+  };
     
     // 정상적으로 잔액이 충분하거나 상금일 때
     const isReward = rewardType === '상금(+)';
