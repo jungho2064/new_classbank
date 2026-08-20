@@ -6,7 +6,7 @@ import {
   Wallet, Store, QrCode, TrendingUp, Settings, ShieldCheck, 
   ArrowRightLeft, Landmark, FileText, Sparkles, AlertTriangle, 
   CheckCircle, XCircle, RefreshCw, LogOut, Lock, User, 
-  UserPlus, Camera, Receipt, Clock, Info
+  UserPlus, Camera, Receipt, Clock, Info, KeyRound, UserCheck
 } from 'lucide-react';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -20,18 +20,21 @@ export default function App() {
   // 모드 상태: 'None' | 'Student' | 'Admin'
   const [loginMode, setLoginMode] = useState<'None' | 'Student' | 'Admin'>('None');
 
-  // 로그인 & 회원가입 폼 상태
-  const [authTab, setAuthTab] = useState<'login' | 'signup' | 'admin'>('login');
+  // 모달 팝업 상태 (회원가입 / 교사 로그인)
+  const [showSignupModal, setShowSignupModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+
+  // 로그인 폼
   const [loginName, setLoginName] = useState('');
   const [loginPw, setLoginPw] = useState('');
   const [adminPwInput, setAdminPwInput] = useState('');
 
-  // 회원가입 전용 폼 상태
+  // 회원가입 전용 폼
   const [regName, setRegName] = useState('');
   const [regPw, setRegPw] = useState('');
   const [regTransferPw, setRegTransferPw] = useState('');
 
-  // 실시간 유저 정보
+  // 실시간 데이터 상태
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userList, setUserList] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -43,25 +46,23 @@ export default function App() {
   const [depositOpen, setDepositOpen] = useState(true);
   const [notice, setNotice] = useState('');
 
-  // 학생 탭 상태
-  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'store' | 'bag' | 'fund'>('wallet');
-  const [adminTab, setAdminTab] = useState<'students' | 'salary' | 'loans' | 'estate' | 'funds' | 'freeze'>('students');
+  // 학생 탭
+  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'deposit' | 'loan' | 'store' | 'bag'>('wallet');
+  const [adminTab, setAdminTab] = useState<'students' | 'salary' | 'loans' | 'estate' | 'freeze'>('students');
 
-  // 폼 입력 상태
+  // 송금 및 예금 입력 폼
   const [transferTarget, setTransferTarget] = useState('');
   const [transferAmt, setTransferAmt] = useState('');
   const [transferPw, setTransferPw] = useState('');
 
-  // 예금 폼 상태
   const [depositType, setDepositType] = useState<'short' | 'long'>('long');
   const [depositAmt, setDepositAmt] = useState('');
   const [depositPw, setDepositPw] = useState('');
 
-  // 대출 상환 폼 상태
   const [repayAmt, setRepayAmt] = useState('');
   const [repayPw, setRepayPw] = useState('');
 
-  // 모달 및 알림
+  // 팝업 알림
   const [selectedQr, setSelectedQr] = useState<any>(null);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
@@ -121,7 +122,7 @@ export default function App() {
   }, []);
 
   // -------------------------------------------------------------
-  // [인증 1] 학생 로그인
+  // [인증 1] 개별 학생 로그인
   // -------------------------------------------------------------
   const handleStudentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,23 +143,23 @@ export default function App() {
       .single();
 
     if (error || !data) {
-      showAlert('❌ 등록되지 않은 대원이거나 비밀번호가 틀렸습니다.');
+      showAlert('❌ 이름 또는 비밀번호가 틀렸습니다. 회원가입을 먼저 진행해주세요.');
       return;
     }
 
     if (data.status === 'Pending') {
-      showAlert('⏳ 선생님의 가입 승인을 기다리고 있습니다. 잠시 후 다시 시도해주세요.');
+      showAlert('⏳ 선생님의 가입 승인 대기 중입니다. 승인 후 이용할 수 있습니다.');
       return;
     }
 
     setCurrentUser(data);
     setLoginMode('Student');
     loadBag(data.name);
-    showAlert(`🚀 ${data.name} 대원, 환영합니다!`);
+    showAlert(`🚀 ${data.name} 대원, 정상 접속되었습니다!`);
   };
 
   // -------------------------------------------------------------
-  // [인증 2] 학생 회원가입
+  // [인증 2] 학생 회원가입 신청
   // -------------------------------------------------------------
   const handleStudentSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,10 +172,10 @@ export default function App() {
 
     const tpw = regTransferPw.trim() || regPw.trim();
 
-    // 중복 체크
+    // 중복 이름 체크
     const { data: existing } = await supabase.from('users').select('name').eq('name', regName.trim()).single();
     if (existing) {
-      showAlert('⚠️ 이미 등록된 대원 이름입니다.');
+      showAlert('⚠️ 이미 존재하는 대원 이름입니다.');
       return;
     }
 
@@ -191,24 +192,25 @@ export default function App() {
     ]);
 
     if (!error) {
-      showAlert('🎉 회원가입 신청 완료! 선생님의 승인 후 로그인할 수 있습니다.');
+      showAlert('🎉 회원가입 신청 완료! 선생님의 승인 후 로그인하실 수 있습니다.');
       setRegName('');
       setRegPw('');
       setRegTransferPw('');
-      setAuthTab('login');
+      setShowSignupModal(false);
       loadData();
     } else {
-      showAlert('❌ 가입 신청 중 오류가 발생했습니다.');
+      showAlert('❌ 가입 신청 처리 중 오류가 발생했습니다.');
     }
   };
 
   // -------------------------------------------------------------
-  // [인증 3] 교사/관리자 로그인
+  // [인증 3] 교사 관리자 로그인
   // -------------------------------------------------------------
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPwInput.trim() === 'admin1234' || adminPwInput.trim() === '1234') {
       setLoginMode('Admin');
+      setShowAdminModal(false);
       setAdminPwInput('');
       showAlert('👨‍🏫 관리자 관제 센터에 접속했습니다.');
     } else {
@@ -222,7 +224,7 @@ export default function App() {
   const handleTransfer = async () => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 송금이 불가합니다.'); return; }
     const amt = parseInt(transferAmt);
-    if (isNaN(amt) || amt <= 0 || !transferTarget) { showAlert('⚠️ 받는 대원과 금액을 확인해주세요.'); return; }
+    if (isNaN(amt) || amt <= 0 || !transferTarget) { showAlert('⚠️ 수신인과 금액을 확인해주세요.'); return; }
 
     const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
     const myBalance = myTrans.reduce((acc, cur) => acc + Number(cur.amount), 0);
@@ -247,7 +249,7 @@ export default function App() {
     await supabase!.from('transactions').insert(rows);
     setTransferAmt(''); setTransferPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert(`💸 ${transferTarget} 대원에게 ${amt}안을 보냈습니다!`);
+    showAlert(`💸 ${transferTarget} 대원에게 ${amt}안을 성공적으로 송금했습니다!`);
   };
 
   // -------------------------------------------------------------
@@ -285,7 +287,7 @@ export default function App() {
 
     setDepositAmt(''); setDepositPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert(`🏦 ${amt}안이 정기예금(${rate}%)에 안전하게 예치되었습니다! (만기일: ${expiryDate})`);
+    showAlert(`🏦 ${amt}안이 정기예금(${rate}%)에 예치되었습니다! (만기일: ${expiryDate})`);
   };
 
   // -------------------------------------------------------------
@@ -317,7 +319,7 @@ export default function App() {
 
     await loadData();
     await loadBag(currentUser.name);
-    showAlert(`🎉 '${item.name}' 구매 완료! [가방] 탭에서 QR을 확인하세요.`);
+    showAlert(`🎉 '${item.name}' 구매 완료! [가방] 탭에서 확인하세요.`);
   };
 
   // -------------------------------------------------------------
@@ -344,18 +346,18 @@ export default function App() {
 
     setRepayAmt(''); setRepayPw(''); setActiveTab('wallet');
     await loadData();
-    showAlert(`💸 ${amt}안 대출 상환이 성공적으로 처리되었습니다!`);
+    showAlert(`💸 ${amt}안 대출 상환이 처리되었습니다!`);
   };
 
   // =============================================================
-  // 1. 로그인 / 회원가입 화면
+  // 1. 메인 로그인 화면 (회원가입 버튼 상시 노출)
   // =============================================================
   if (loginMode === 'None') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4">
         {alertMsg && <div className="fixed top-6 bg-indigo-600 px-5 py-3 rounded-2xl z-50 text-xs font-bold animate-bounce shadow-2xl max-w-xs text-center">{alertMsg}</div>}
         
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-5">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
           <div className="text-center space-y-2">
             <div className="inline-block p-4 bg-indigo-600/20 rounded-2xl border border-indigo-500/30 text-4xl mb-1">🚀</div>
             <h1 className="text-2xl font-black text-indigo-400">우주 디지털 학급은행</h1>
@@ -368,139 +370,166 @@ export default function App() {
             </div>
           )}
 
-          {/* 인증 탭 선택 (로그인 / 회원가입 / 관리자) */}
-          <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-800">
-            <button
-              onClick={() => setAuthTab('login')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition ${authTab === 'login' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-            >
-              학생 로그인
-            </button>
-            <button
-              onClick={() => setAuthTab('signup')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition ${authTab === 'signup' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-            >
-              대원 회원가입
-            </button>
-            <button
-              onClick={() => setAuthTab('admin')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition ${authTab === 'admin' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
-            >
-              선생님 센터
-            </button>
-          </div>
-
           {/* 학생 로그인 폼 */}
-          {authTab === 'login' && (
-            <form onSubmit={handleStudentLogin} className="space-y-3 pt-1">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 ml-1">대원 이름</label>
-                <input 
-                  type="text" 
-                  placeholder="예: 최정호" 
-                  value={loginName} 
-                  onChange={e => setLoginName(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 ml-1">로그인 비밀번호</label>
-                <input 
-                  type="password" 
-                  placeholder="비밀번호 입력" 
-                  value={loginPw} 
-                  onChange={e => setLoginPw(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-sm shadow-lg transition mt-2 flex items-center justify-center gap-2"
-              >
-                <User size={18} /> 통장 접속하기
-              </button>
-            </form>
-          )}
-
-          {/* 회원가입 폼 */}
-          {authTab === 'signup' && (
-            <form onSubmit={handleStudentSignup} className="space-y-3 pt-1">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 ml-1">내 이름</label>
-                <input 
-                  type="text" 
-                  placeholder="실명 입력 (예: 김우주)" 
-                  value={regName} 
-                  onChange={e => setRegName(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 ml-1">로그인 비밀번호 설정</label>
-                <input 
-                  type="password" 
-                  placeholder="접속용 비밀번호" 
-                  value={regPw} 
-                  onChange={e => setRegPw(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 ml-1">송금/결제용 2차 비밀번호 (선택)</label>
-                <input 
-                  type="password" 
-                  placeholder="미입력 시 로그인 비번과 동일" 
-                  value={regTransferPw} 
-                  onChange={e => setRegTransferPw(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 py-3.5 rounded-xl font-bold text-sm shadow-lg transition mt-2 flex items-center justify-center gap-2"
-              >
-                <UserPlus size={18} /> 가입 신청 제출하기
-              </button>
-            </form>
-          )}
-
-          {/* 관리자 로그인 폼 */}
-          {authTab === 'admin' && (
-            <form onSubmit={handleAdminLogin} className="space-y-3 pt-1">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 ml-1">선생님 마스터 비밀번호</label>
-                <input 
-                  type="password" 
-                  placeholder="관리자 비번 입력" 
-                  value={adminPwInput} 
-                  onChange={e => setAdminPwInput(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-slate-800 hover:bg-slate-700 py-3.5 rounded-xl font-bold text-sm text-slate-200 border border-slate-700 transition mt-2 flex items-center justify-center gap-2"
-              >
-                <ShieldCheck size={18} /> 관제 센터 접속
-              </button>
-            </form>
-          )}
-
-          <div className="flex justify-center pt-2">
+          <form onSubmit={handleStudentLogin} className="space-y-3.5 pt-1">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1 ml-1">대원 이름 (실명)</label>
+              <input 
+                type="text" 
+                placeholder="예: 최정호" 
+                value={loginName} 
+                onChange={e => setLoginName(e.target.value)} 
+                className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1 ml-1">로그인 비밀번호</label>
+              <input 
+                type="password" 
+                placeholder="비밀번호 입력" 
+                value={loginPw} 
+                onChange={e => setLoginPw(e.target.value)} 
+                className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-sm font-bold text-white focus:border-indigo-500 outline-none"
+              />
+            </div>
+            
             <button 
-              onClick={() => setLang(lang === 'ko' ? 'ru' : 'ko')}
-              className="text-xs text-slate-500 hover:text-slate-300"
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
             >
-              🌐 {lang === 'ko' ? 'Русский переключить' : '한국어로 전환'}
+              <User size={18} /> 통장 접속하기
+            </button>
+          </form>
+
+          {/* 회원가입 및 관리자 접속 버튼 (시각적 분리) */}
+          <div className="pt-2 border-t border-slate-800 space-y-2">
+            <button 
+              onClick={() => setShowSignupModal(true)}
+              className="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition"
+            >
+              <UserPlus size={16} /> 🚀 처음 왔나요? 대원 회원가입 신청하기
+            </button>
+
+            <button 
+              onClick={() => setShowAdminModal(true)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl font-bold text-xs border border-slate-700/60 flex items-center justify-center gap-1.5 transition"
+            >
+              <ShieldCheck size={15} /> 선생님 관리자 센터 접속
             </button>
           </div>
         </div>
+
+        {/* ========================================================= */}
+        {/* 회원가입 모달 팝업 */}
+        {/* ========================================================= */}
+        {showSignupModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <h3 className="font-bold text-base text-emerald-400 flex items-center gap-2">
+                  <UserPlus size={18} /> 대원 회원가입 신청
+                </h3>
+                <button onClick={() => setShowSignupModal(false)} className="text-slate-400 hover:text-white text-sm">✕</button>
+              </div>
+
+              <form onSubmit={handleStudentSignup} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">내 실명 (이름)</label>
+                  <input 
+                    type="text" 
+                    placeholder="예: 김우주" 
+                    value={regName} 
+                    onChange={e => setRegName(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">로그인 비밀번호</label>
+                  <input 
+                    type="password" 
+                    placeholder="접속용 비밀번호" 
+                    value={regPw} 
+                    onChange={e => setRegPw(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">송금 2차 비밀번호 (선택)</label>
+                  <input 
+                    type="password" 
+                    placeholder="미입력 시 로그인 비번과 동일" 
+                    value={regTransferPw} 
+                    onChange={e => setRegTransferPw(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white"
+                  />
+                </div>
+
+                <div className="bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-500/20 text-[11px] text-indigo-300">
+                  💡 가입 신청을 완료하면 선생님이 승인한 후 바로 로그인할 수 있습니다.
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowSignupModal(false)} 
+                    className="flex-1 bg-slate-800 py-3 rounded-xl font-bold text-xs text-slate-400 border border-slate-700"
+                  >
+                    취소
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-xs text-white"
+                  >
+                    가입 신청 완료
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* 관리자 비밀번호 모달 팝업 */}
+        {/* ========================================================= */}
+        {showAdminModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full space-y-4">
+              <h3 className="font-bold text-base text-indigo-400 flex items-center gap-2">
+                <ShieldCheck size={18} /> 선생님 관제 접속
+              </h3>
+              <form onSubmit={handleAdminLogin} className="space-y-3">
+                <input 
+                  type="password" 
+                  placeholder="관리자 마스터 비밀번호" 
+                  value={adminPwInput} 
+                  onChange={e => setAdminPwInput(e.target.value)} 
+                  className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold text-white text-center"
+                />
+                <div className="flex gap-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAdminModal(false)} 
+                    className="flex-1 bg-slate-800 py-2.5 rounded-xl font-bold text-xs text-slate-400"
+                  >
+                    취소
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 bg-indigo-600 py-2.5 rounded-xl font-bold text-xs text-white"
+                  >
+                    접속
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   // =============================================================
-  // 2. 관리자 화면
+  // 2. 관리자 관제 센터
   // =============================================================
   if (loginMode === 'Admin') {
     return (
@@ -522,7 +551,7 @@ export default function App() {
               { id: 'salary', label: '💸 주급 일괄 정산' },
               { id: 'loans', label: '🏦 대출/독촉 관리' },
               { id: 'estate', label: '🏠 좌석 부동산' },
-              { id: 'freeze', label: '❄️ 방학/점검 모드' }
+              { id: 'freeze', label: '❄️ 방학 동결 모드' }
             ].map(m => (
               <button key={m.id} onClick={() => setAdminTab(m.id as any)} className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap ${adminTab === m.id ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'}`}>
                 {m.label}
@@ -538,7 +567,7 @@ export default function App() {
                   <div key={u.id} className="bg-slate-950 p-3 rounded-xl flex justify-between items-center border border-slate-800 text-xs">
                     <div>
                       <p className="font-bold text-white">{u.name} ({u.job})</p>
-                      <p className="text-slate-400">대출 잔액: {u.loan_balance}안 | 상태: <strong className={u.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400'}>{u.status}</strong></p>
+                      <p className="text-slate-400">상태: <strong className={u.status === 'Approved' ? 'text-emerald-400' : 'text-amber-400'}>{u.status}</strong></p>
                     </div>
                     {u.status === 'Pending' ? (
                       <button 
@@ -617,7 +646,7 @@ export default function App() {
   // =============================================================
   const myTrans = transactions.filter(t => t.name === currentUser.name && t.status !== 'Rejected');
   
-  // 내 현금 잔액 (예금 제외)
+  // 내 현금 잔액
   const myCashTrans = myTrans.filter(t => t.status !== 'Deposit_Active');
   const myBalance = myCashTrans.reduce((acc, cur) => acc + Number(cur.amount), 0);
 
@@ -629,7 +658,6 @@ export default function App() {
     <div className="max-w-md mx-auto bg-slate-950 min-h-screen shadow-2xl pb-28 text-white">
       {alertMsg && <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-indigo-600 px-5 py-3 rounded-2xl z-50 text-xs font-bold animate-bounce shadow-xl w-[90%] text-center">{alertMsg}</div>}
 
-      {/* 헤더 */}
       <header className="bg-gradient-to-b from-indigo-700 to-indigo-900 p-6 rounded-b-[2rem] shadow-xl">
         <div className="flex justify-between items-center mb-3">
           <span className="font-black text-xs tracking-wider text-indigo-200">SPACE CLASS BANK</span>
@@ -649,7 +677,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* 독촉장 경고 배너 */}
       {currentUser.dunning === 'ON' && !isFrozen && (
         <div className="bg-rose-900/60 border-l-4 border-rose-500 p-3 mx-4 mt-4 rounded-r-xl text-xs text-rose-200">
           🚨 <strong>중앙은행 독촉장:</strong> 대출이 연체되었습니다. [대출상환]에서 즉시 갚아주세요!
@@ -658,7 +685,6 @@ export default function App() {
 
       {/* 본문 탭 */}
       <main className="p-4 space-y-4">
-        {/* [홈 탭] */}
         {activeTab === 'wallet' && (
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-2.5">
