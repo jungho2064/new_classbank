@@ -24,6 +24,7 @@ export default function AdminPanel({
   const safeSeats = Array.isArray(seats) ? seats : [];
 
   const [adminTab, setAdminTab] = useState<'pending' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'qr' | 'funds' | 'audit' | 'system'>('pending');
+  const [auditFilter, setAuditFilter] = useState<'student' | 'treasury' | 'all'>('student');
 
   // 상/벌금
   const [rewardTarget, setRewardTarget] = useState('');
@@ -534,19 +535,72 @@ const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected',
 
         {/* 10. 전체 장부 감사 */}
         {adminTab === 'audit' && (
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-            <h3 className="font-bold text-sm text-indigo-400">📜 학급 전체 거래 장부 (최신순)</h3>
-            <div className="space-y-1.5 max-h-96 overflow-y-auto">
-              {safeTrans.map((t: any) => (
-                <div key={t.id} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-[11px] flex justify-between">
-                  <div><span className="font-bold text-white">{t.name}</span> <span className="text-slate-400 ml-1">[{t.type}] {t.note}</span></div>
-                  <span className={`font-bold ${Number(t.amount || 0) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{t.amount}안</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+  <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+    <div className="flex flex-col md:flex-row justify-between md:items-center gap-2">
+      <h3 className="font-bold text-sm text-indigo-400">📜 거래 장부 감사(Audit)</h3>
+      
+      {/* 👈 장부 분리 필터 버튼 */}
+      <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+        <button 
+          onClick={() => setAuditFilter('student')} 
+          className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'student' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+        >
+          👤 학생 거래 장부
+        </button>
+        <button 
+          onClick={() => setAuditFilter('treasury')} 
+          className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'treasury' ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
+        >
+          🏛️ 국고(중앙은행) 장부
+        </button>
+        <button 
+          onClick={() => setAuditFilter('all')} 
+          className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
+        >
+          통합 전체 보기
+        </button>
+      </div>
+    </div>
 
+    {/* 장부 목록 렌더링 */}
+    <div className="space-y-1.5 max-h-96 overflow-y-auto">
+      {safeTrans
+        .filter((t: any) => {
+          if (auditFilter === 'student') return t.name !== '국고(중앙은행)';
+          if (auditFilter === 'treasury') return t.name === '국고(중앙은행)';
+          return true;
+        })
+        .map((t: any) => {
+          const isTreasury = t.name === '국고(중앙은행)';
+          return (
+            <div 
+              key={t.id} 
+              className={`p-2.5 rounded-xl border text-[11px] flex justify-between items-center ${
+                isTreasury 
+                  ? 'bg-amber-950/30 border-amber-500/30' 
+                  : 'bg-slate-950 border-slate-800'
+              }`}
+            >
+              <div>
+                <span className={`font-bold ${isTreasury ? 'text-amber-400' : 'text-white'}`}>
+                  {t.name}
+                </span>
+                <span className="text-slate-400 ml-1.5">
+                  [{t.type}] {t.note}
+                </span>
+                <span className="text-slate-500 text-[10px] ml-2">
+                  ({t.date})
+                </span>
+              </div>
+              <span className={`font-bold ${Number(t.amount || 0) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {Number(t.amount || 0) > 0 ? `+${t.amount}` : t.amount} 안
+              </span>
+            </div>
+          );
+        })}
+    </div>
+  </div>
+)}
         {/* 11. 시스템 제어 */}
         {adminTab === 'system' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
