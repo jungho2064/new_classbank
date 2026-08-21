@@ -595,7 +595,7 @@ await supabase.from('users').update({
                             </div>
                           </div>
                           <div className="flex justify-between text-[11px] text-slate-400">
-                            <span>가입일: {d.date?.split(' ')[0] || d.date}</span>
+                            <span>가입일: {d.date ? d.date.split('. ').slice(0, 3).join('.') : '-'}</span>
                             <span className={isExpired ? 'text-amber-400 font-bold' : ''}>만기일: {expiry}</span>
                           </div>
                         </div>
