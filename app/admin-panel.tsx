@@ -165,6 +165,7 @@ await supabase.from('users').update({
   };
 
   // 주급 일괄 지급
+  // 주급 일괄 지급 (개별 설정된 salary 반영)
   const handlePaySalaries = async () => {
     if (!supabase) return;
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
@@ -172,7 +173,7 @@ await supabase.from('users').update({
     const rows: any[] = [];
 
     for (const u of approved) {
-      const base = 140;
+      const base = Number(u.salary || 140); // 👈 개별 봉급 적용
       const tax = Math.floor(base * (taxRate / 100)) + Math.floor(base * (maintRate / 100));
       const repay = Math.min(Number(u.weekly_repay || 0), Number(u.loan_balance || 0));
       const net = base - tax - repay;
@@ -450,19 +451,15 @@ await supabase.from('users').update({
           </div>
         )}
 
-        {/* 3. 주급정산 (미리보기 표 및 일괄 지급) */}
+        {/* 3. 주급 정산 및 직업/봉급 관리 */}
         {adminTab === 'salary' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <h3 className="font-bold text-sm text-indigo-400">💰 전 대원 주급 자동 정산기</h3>
+              <h3 className="font-bold text-sm text-indigo-400">💰 전 대원 주급 정산 & 직업/봉급 관리</h3>
               <span className="text-xs text-slate-400">
-                지급 대상: <b className="text-white">{safeUsers.filter((u: any) => u && u.status === 'Approved').length}명</b>
+                대상: <b className="text-white">{safeUsers.filter((u: any) => u && u.status === 'Approved').length}명</b>
               </span>
             </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              기본급 140안에서 세율({taxRate}%)과 유지비({maintRate}%)를 공제하고 대출 상환액을 자동 회수한 뒤 실지급액을 계좌에 입금합니다.
-            </p>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
@@ -485,40 +482,70 @@ await supabase.from('users').update({
               </div>
             </div>
 
-            {/* 💡 대원별 주급 정산 내역 미리보기 표 */}
+            {/* 대원별 직업/봉급 수정 및 실시간 계산 표 */}
             <div className="space-y-2 pt-2">
-              <p className="font-bold text-xs text-slate-300">📋 지급 예정 내역 미리보기</p>
+              <p className="font-bold text-xs text-slate-300">📋 대원별 직업·기본급 설정 및 지급 예정액</p>
               <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
-                <div className="max-h-60 overflow-y-auto">
+                <div className="max-h-72 overflow-y-auto">
                   <table className="w-full text-[11px] text-left">
                     <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 sticky top-0">
                       <tr>
                         <th className="p-2.5 pl-3">대원명</th>
-                        <th className="p-2.5 text-center">기본급</th>
-                        <th className="p-2.5 text-center">공제(세금+유지비)</th>
-                        <th className="p-2.5 text-center">대출 상환</th>
-                        <th className="p-2.5 pr-3 text-right">실지급액</th>
+                        <th className="p-2.5">직업</th>
+                        <th className="p-2.5">기본급(안)</th>
+                        <th className="p-2.5 text-center">공제</th>
+                        <th className="p-2.5 text-center">상환</th>
+                        <th className="p-2.5 text-right">실지급</th>
+                        <th className="p-2.5 pr-3 text-center">관리</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
                       {safeUsers
                         .filter((u: any) => u && u.status === 'Approved')
                         .map((u: any) => {
-                          const base = 140;
+                          const base = Number(u.salary || 140);
                           const tax = Math.floor(base * (taxRate / 100)) + Math.floor(base * (maintRate / 100));
                           const repay = Math.min(Number(u.weekly_repay || 0), Number(u.loan_balance || 0));
                           const net = base - tax - repay;
 
                           return (
                             <tr key={u.id} className="hover:bg-slate-900/40">
-                              <td className="p-2.5 pl-3 font-bold text-white">{u.name}</td>
-                              <td className="p-2.5 text-center text-slate-300">{base}안</td>
-                              <td className="p-2.5 text-center text-rose-400">-{tax}안</td>
-                              <td className="p-2.5 text-center text-amber-400">
-                                {repay > 0 ? `-${repay}안` : '0안'}
+                              <td className="p-2.5 pl-3 font-bold text-white whitespace-nowrap">{u.name}</td>
+                              <td className="p-2">
+                                <input 
+                                  type="text" 
+                                  defaultValue={u.job || '우주 시민'}
+                                  id={`job-${u.id}`}
+                                  className="w-20 bg-slate-900 border border-slate-700 px-1.5 py-1 rounded text-white text-[11px]"
+                                />
                               </td>
-                              <td className="p-2.5 pr-3 text-right font-bold text-emerald-400">
-                                +{net}안
+                              <td className="p-2">
+                                <input 
+                                  type="number" 
+                                  defaultValue={base}
+                                  id={`sal-${u.id}`}
+                                  className="w-16 bg-slate-900 border border-slate-700 px-1.5 py-1 rounded text-yellow-400 font-bold text-[11px]"
+                                />
+                              </td>
+                              <td className="p-2.5 text-center text-rose-400 whitespace-nowrap">-{tax}</td>
+                              <td className="p-2.5 text-center text-amber-400 whitespace-nowrap">{repay > 0 ? `-${repay}` : '0'}</td>
+                              <td className="p-2.5 text-right font-bold text-emerald-400 whitespace-nowrap">+{net}</td>
+                              <td className="p-2 pr-3 text-center">
+                                <button 
+                                  onClick={async () => {
+                                    const jobInput = (document.getElementById(`job-${u.id}`) as HTMLInputElement)?.value;
+                                    const salInput = (document.getElementById(`sal-${u.id}`) as HTMLInputElement)?.value;
+                                    await supabase.from('users').update({ 
+                                      job: jobInput, 
+                                      salary: parseInt(salInput || '140') 
+                                    }).eq('id', u.id);
+                                    if (loadData) await loadData();
+                                    if (showAlert) showAlert(`✅ ${u.name} 대원의 정보가 저장되었습니다.`);
+                                  }}
+                                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] font-bold"
+                                >
+                                  저장
+                                </button>
                               </td>
                             </tr>
                           );
