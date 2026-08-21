@@ -304,11 +304,42 @@ export default function App() {
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full space-y-3 text-center">
               <h3 className="font-bold text-indigo-400">선생님 접속</h3>
-              <input type="password" placeholder="마스터 비밀번호" value={adminPwInput} onChange={e => setAdminPwInput(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-center text-xs"/>
-              <div className="flex gap-2">
-                <button onClick={() => setShowAdminModal(false)} className="flex-1 bg-slate-800 py-2 rounded-xl text-xs">취소</button>
-                <button onClick={() => { if (adminPwInput === 'admin1234' || adminPwInput === '1234') { setLoginMode('Admin'); setShowAdminModal(false); } else showAlert('비밀번호 불일치'); }} className="flex-1 bg-indigo-600 py-2 rounded-xl text-xs font-bold">접속</button>
-              </div>
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (adminPwInput === 'admin1234' || adminPwInput === '1234') {
+                    setLoginMode('Admin');
+                    setShowAdminModal(false);
+                  } else {
+                    showAlert('비밀번호 불일치');
+                  }
+                }} 
+                className="space-y-3"
+              >
+                <input 
+                  type="password" 
+                  autoFocus
+                  placeholder="마스터 비밀번호" 
+                  value={adminPwInput} 
+                  onChange={e => setAdminPwInput(e.target.value)} 
+                  className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-center text-xs outline-none focus:border-indigo-500"
+                />
+                <div className="flex gap-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAdminModal(false)} 
+                    className="flex-1 bg-slate-800 py-2 rounded-xl text-xs"
+                  >
+                    취소
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-2 rounded-xl text-xs font-bold"
+                  >
+                    접속
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
