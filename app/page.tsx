@@ -178,11 +178,20 @@ export default function App() {
     if (!depositOpen) { showAlert('🔒 현재 정기예금 가입 창구가 닫혀 있습니다.'); return; }
     const amt = parseInt(depositAmt);
     if (isNaN(amt) || amt < 10) { showAlert('⚠️ 최소 10안 이상부터 가능합니다.'); return; }
+    
+    // 💡 잔액 초과 가입 방지 검증 추가
+    if (myBalance < amt) { showAlert(`❌ 보유 잔액(${myBalance}안)을 초과하여 예금에 가입할 수 없습니다.`); return; }
+
     const days = depositType === 'short' ? 7 : 28;
     const rate = depositType === 'short' ? 3 : 15;
     const expiry = new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '예금 가입', amount: -amt, note: `만기:${expiry}|이율:${rate}|원금:${amt}`, status: 'Deposit_Active' }]);
+    
+    await supabase!.from('transactions').insert([
+      { date: nowStr, name: currentUser?.name, type: '예금 가입', amount: -amt, note: `만기:${expiry}|이율:${rate}|원금:${amt}`, status: 'Deposit_Active' },
+      { date: nowStr, name: '국고(중앙은행)', type: '예금 예치금', amount: amt, note: `${currentUser?.name} 예금 수탁`, status: 'Success' }
+    ]);
+    
     setDepositAmt(''); setDepositPw(''); setActiveTab('wallet');
     await loadData();
     showAlert(`🏦 정기예금(${rate}%) 가입 완료!`);
@@ -369,8 +378,8 @@ export default function App() {
   }
 
   // 학생 메인
-  const myTrans = transactions.filter(t => t.name === currentUser?.name && t.status !== 'System');
-const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((a, c) => a + Number(c.amount || 0), 0);
+  const myTrans = transactions.filter(t => t.name === currentUser?.name && t.status !== 'System' && t.status !== 'Rejected');
+  const myBalance = myTrans.reduce((a, c) => a + Number(c.amount || 0), 0);
   const myDepositBalance = myTrans.filter(t => t.status === 'Deposit_Active').reduce((a, c) => a + Math.abs(Number(c.amount || 0)), 0);
 
   return (
