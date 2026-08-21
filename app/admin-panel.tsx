@@ -450,16 +450,91 @@ await supabase.from('users').update({
           </div>
         )}
 
-        {/* 3. 주급정산 */}
+        {/* 3. 주급정산 (미리보기 표 및 일괄 지급) */}
         {adminTab === 'salary' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-bold text-sm text-indigo-400">💰 전 대원 주급 자동 정산기</h3>
-            <p className="text-xs text-slate-400">기본급 140안에서 세율({taxRate}%)과 유지비({maintRate}%)를 공제하고 대출 상환액을 자동 회수한 뒤 실지급액을 계좌에 입금합니다.</p>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div><label className="text-slate-400">세율 (%)</label><input type="number" value={taxRate} onChange={e => setTaxRate(Number(e.target.value))} className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold"/></div>
-              <div><label className="text-slate-400">유지비 (%)</label><input type="number" value={maintRate} onChange={e => setMaintRate(Number(e.target.value))} className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold"/></div>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+              <h3 className="font-bold text-sm text-indigo-400">💰 전 대원 주급 자동 정산기</h3>
+              <span className="text-xs text-slate-400">
+                지급 대상: <b className="text-white">{safeUsers.filter((u: any) => u && u.status === 'Approved').length}명</b>
+              </span>
             </div>
-            <button onClick={handlePaySalaries} className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-sm">전원 주급 입금 및 자동 징수 실행</button>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              기본급 140안에서 세율({taxRate}%)과 유지비({maintRate}%)를 공제하고 대출 상환액을 자동 회수한 뒤 실지급액을 계좌에 입금합니다.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="text-slate-400">세율 (%)</label>
+                <input 
+                  type="number" 
+                  value={taxRate} 
+                  onChange={e => setTaxRate(Number(e.target.value))} 
+                  className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="text-slate-400">유지비 (%)</label>
+                <input 
+                  type="number" 
+                  value={maintRate} 
+                  onChange={e => setMaintRate(Number(e.target.value))} 
+                  className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* 💡 대원별 주급 정산 내역 미리보기 표 */}
+            <div className="space-y-2 pt-2">
+              <p className="font-bold text-xs text-slate-300">📋 지급 예정 내역 미리보기</p>
+              <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                <div className="max-h-60 overflow-y-auto">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 sticky top-0">
+                      <tr>
+                        <th className="p-2.5 pl-3">대원명</th>
+                        <th className="p-2.5 text-center">기본급</th>
+                        <th className="p-2.5 text-center">공제(세금+유지비)</th>
+                        <th className="p-2.5 text-center">대출 상환</th>
+                        <th className="p-2.5 pr-3 text-right">실지급액</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {safeUsers
+                        .filter((u: any) => u && u.status === 'Approved')
+                        .map((u: any) => {
+                          const base = 140;
+                          const tax = Math.floor(base * (taxRate / 100)) + Math.floor(base * (maintRate / 100));
+                          const repay = Math.min(Number(u.weekly_repay || 0), Number(u.loan_balance || 0));
+                          const net = base - tax - repay;
+
+                          return (
+                            <tr key={u.id} className="hover:bg-slate-900/40">
+                              <td className="p-2.5 pl-3 font-bold text-white">{u.name}</td>
+                              <td className="p-2.5 text-center text-slate-300">{base}안</td>
+                              <td className="p-2.5 text-center text-rose-400">-{tax}안</td>
+                              <td className="p-2.5 text-center text-amber-400">
+                                {repay > 0 ? `-${repay}안` : '0안'}
+                              </td>
+                              <td className="p-2.5 pr-3 text-right font-bold text-emerald-400">
+                                +{net}안
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={handlePaySalaries} 
+              className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold text-sm shadow-lg transition"
+            >
+              전원 주급 입금 및 자동 징수 실행
+            </button>
           </div>
         )}
 
