@@ -528,14 +528,82 @@ await supabase.from('users').update({
           </div>
         )}
 
-        {/* 6. 예금 만기 지급 */}
+        {/* 6. 예금 관리 & 학생별 가입 현황 */}
         {adminTab === 'deposits' && (
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-sm text-indigo-400">💰 만기 예금 원리금 일괄 지급</h3>
-              <button onClick={handleMatureAllDeposits} className="bg-emerald-600 px-4 py-2 rounded-xl text-xs font-bold">만기 도래분 일괄 지급 실행</button>
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-5">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-4 border-b border-slate-800">
+              <div>
+                <h3 className="font-bold text-sm text-indigo-400">💰 정기예금 수탁 및 만기 관리</h3>
+                <p className="text-xs text-slate-400 mt-1">만기 도래 시 이자소득세(15%)를 원천징수 후 세후 원리금을 학생 계좌로 자동 입금합니다.</p>
+              </div>
+              <button 
+                onClick={handleMatureAllDeposits} 
+                className="bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap shadow-lg transition"
+              >
+                만기 도래분 일괄 지급 실행
+              </button>
             </div>
-            <p className="text-xs text-slate-400">만기일이 지난 예금의 이자소득세(15%)를 원천 징수하여 국고에 넣고 세후 원리금을 학생 계좌로 자동 입금합니다.</p>
+
+            {/* 학생별 예금 가입 현황 목록 */}
+            <div className="space-y-3">
+              <h4 className="font-bold text-xs text-slate-300 flex items-center gap-1.5">
+                <span>📋</span> 현재 운용 중인 학생 예금 목록 ({safeTrans.filter((t: any) => t && t.status === 'Deposit_Active').length}건)
+              </h4>
+
+              {safeTrans.filter((t: any) => t && t.status === 'Deposit_Active').length === 0 ? (
+                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-xs text-slate-500">
+                  현재 활성화된 정기예금 가입 내역이 없습니다.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
+                  {safeTrans
+                    .filter((t: any) => t && t.status === 'Deposit_Active')
+                    .map((d: any) => {
+                      const noteParts = Object.fromEntries(
+                        (d.note || '').split('|').map((p: string) => {
+                          const [k, ...v] = p.split(':');
+                          return [k ? k.trim() : '', v.join(':').trim()];
+                        })
+                      );
+                      const prin = parseInt(noteParts['원금'] || String(Math.abs(d.amount || 0)));
+                      const rate = parseInt(noteParts['이율'] || '0');
+                      const expiry = noteParts['만기'] || '미정';
+                      const today = new Date().toISOString().split('T')[0];
+                      const isExpired = expiry <= today;
+                      const expectedInt = Math.floor(prin * (rate / 100));
+
+                      return (
+                        <div key={d.id} className={`p-4 rounded-xl border transition ${isExpired ? 'bg-amber-950/20 border-amber-500/40' : 'bg-slate-950 border-slate-800'}`}>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-sm text-white">{d.name} 대원</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${isExpired ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'}`}>
+                              {isExpired ? '만기 도래' : '예치 중'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80 mb-2">
+                            <div>
+                              <p className="text-[10px] text-slate-400">가입 원금</p>
+                              <p className="font-bold text-white mt-0.5">{prin.toLocaleString()}안</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-400">약정 이율</p>
+                              <p className="font-bold text-indigo-400 mt-0.5">{rate}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-400">만기 예상 수령</p>
+                              <p className="font-bold text-emerald-400 mt-0.5">{(prin + Math.floor(expectedInt * 0.85)).toLocaleString()}안</p>
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-[11px] text-slate-400">
+                            <span>가입일: {d.date?.split(' ')[0] || d.date}</span>
+                            <span className={isExpired ? 'text-amber-400 font-bold' : ''}>만기일: {expiry}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
