@@ -452,28 +452,120 @@ export default function App() {
         )}
 
         {activeTab === 'deposit' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
-            <div className="flex justify-between items-center">
-              <h2 className="font-bold text-yellow-400 text-sm">정기예금 센터</h2>
-              <button onClick={() => setActiveTab('wallet')}><ChevronLeft size={16}/></button>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-xs">
+            <div className="flex justify-between items-center pb-1">
+              <h2 className="font-bold text-yellow-400 text-sm flex items-center gap-1.5">
+                <span>🏛️</span> 정기예금 센터
+              </h2>
+              <button onClick={() => setActiveTab('wallet')} className="text-slate-400 hover:text-white p-1">
+                <ChevronLeft size={18}/>
+              </button>
             </div>
-            {!depositOpen ? (
-              <div className="p-6 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
-                <p className="text-2xl">🔒</p>
-                <p className="text-sm font-bold text-slate-300">현재 예금 신규 가입 창구가 닫혀 있습니다.</p>
-                <p className="text-xs text-slate-500">선생님이 예금 가입 기간을 오픈할 때까지 기다려주세요.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setDepositType('short')} className={`p-3 rounded-xl border font-bold ${depositType === 'short' ? 'bg-indigo-600/30 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>단기 (7일, 3%)</button>
-                  <button onClick={() => setDepositType('long')} className={`p-3 rounded-xl border font-bold ${depositType === 'long' ? 'bg-indigo-600/30 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>장기 (28일, 15%)</button>
+
+            {/* 1. 내가 가입한 예금 현황 목록 */}
+            <div className="space-y-2">
+              <p className="font-bold text-slate-300 flex items-center justify-between text-xs">
+                <span>📋 내 예금 보유 현황</span>
+                <span className="text-[11px] text-indigo-400 font-normal">
+                  총 {myTrans.filter((t: any) => t.status === 'Deposit_Active').length}건
+                </span>
+              </p>
+
+              {myTrans.filter((t: any) => t.status === 'Deposit_Active').length === 0 ? (
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center text-slate-500">
+                  현재 가입 중인 정기예금이 없습니다.
                 </div>
-                <input type="number" placeholder="예금할 금액" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
-                <input type="password" placeholder="비밀번호" value={depositPw} onChange={e => setDepositPw(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold"/>
-                <button onClick={handleDeposit} className="w-full bg-indigo-600 py-3 rounded-xl font-bold">예금 개설</button>
-              </>
-            )}
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                  {myTrans
+                    .filter((t: any) => t.status === 'Deposit_Active')
+                    .map((d: any) => {
+                      const parts = Object.fromEntries(
+                        (d.note || '').split('|').map((p: string) => {
+                          const [k, ...v] = p.split(':');
+                          return [k ? k.trim() : '', v.join(':').trim()];
+                        })
+                      );
+                      const prin = parseInt(parts['원금'] || String(Math.abs(d.amount || 0)));
+                      const rate = parseInt(parts['이율'] || '0');
+                      const expiry = parts['만기'] || '미정';
+                      const expNet = prin + Math.floor(prin * (rate / 100) * 0.85);
+
+                      return (
+                        <div key={d.id} className="bg-slate-950 border border-indigo-500/30 p-3.5 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-indigo-300">정기예금 ({rate}%)</span>
+                            <span className="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-500/30">
+                              만기일: {expiry}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 bg-slate-900/80 p-2.5 rounded-lg text-center">
+                            <div>
+                              <p className="text-[10px] text-slate-400">예치 원금</p>
+                              <p className="font-bold text-white mt-0.5">{prin.toLocaleString()}안</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-400">만기 세후 수령액</p>
+                              <p className="font-bold text-emerald-400 mt-0.5">+{expNet.toLocaleString()}안</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. 신규 예금 가입 창구 */}
+            <div className="pt-2 border-t border-slate-800 space-y-3">
+              <p className="font-bold text-slate-300">➕ 신규 예금 가입</p>
+              {!depositOpen ? (
+                <div className="p-5 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-1.5">
+                  <p className="text-xl">🔒</p>
+                  <p className="text-xs font-bold text-slate-300">현재 신규 가입 창구가 닫혀 있습니다.</p>
+                  <p className="text-[11px] text-slate-500">선생님이 예금 가입 기간을 오픈할 때까지 기다려주세요.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => setDepositType('short')} 
+                      className={`p-3 rounded-xl border font-bold transition ${depositType === 'short' ? 'bg-indigo-600/30 border-indigo-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                    >
+                      단기 (7일, 3%)
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setDepositType('long')} 
+                      className={`p-3 rounded-xl border font-bold transition ${depositType === 'long' ? 'bg-indigo-600/30 border-indigo-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                    >
+                      장기 (28일, 15%)
+                    </button>
+                  </div>
+                  <input 
+                    type="number" 
+                    placeholder="예금할 금액 (최소 10안)" 
+                    value={depositAmt} 
+                    onChange={e => setDepositAmt(e.target.value)} 
+                    className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold outline-none focus:border-indigo-500"
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="비밀번호" 
+                    value={depositPw} 
+                    onChange={e => setDepositPw(e.target.value)} 
+                    className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold outline-none focus:border-indigo-500"
+                  />
+                  <button 
+                    onClick={handleDeposit} 
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold shadow-lg transition"
+                  >
+                    예금 개설
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         )}
 
