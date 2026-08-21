@@ -116,6 +116,15 @@ export default function App() {
     setLoginMode('Student');
     loadBag(data.name);
     showAlert(`🚀 ${data.name} 대원 환영합니다!`);
+    setLoginPw('');
+  };
+  // 로그아웃 처리 함수 (비밀번호 및 입력 필드 전체 초기화)
+  const handleLogout = () => {
+    setLoginMode('None');
+    setCurrentUser(null);
+    setLoginName('');       // 대원 실명 초기화
+    setLoginPw('');         // 대원 비밀번호 초기화
+    setAdminPwInput('');    // 관리자 마스터 비밀번호 초기화
   };
 
   const handleStudentSignup = async (e: React.FormEvent) => {
@@ -256,7 +265,7 @@ export default function App() {
         setDepositOpen={setDepositOpen} 
         loadData={loadData} 
         showAlert={showAlert} 
-        onLogout={() => setLoginMode('None')} 
+        onLogout={handleLogout} 
       />
     );
   }
@@ -375,7 +384,7 @@ const myBalance = myTrans.filter(t => t.status !== 'Deposit_Active').reduce((a, 
       <header className="bg-gradient-to-b from-indigo-700 to-indigo-900 p-6 rounded-b-[2rem] shadow-xl">
         <div className="flex justify-between items-center mb-3">
           <span className="font-black text-xs text-indigo-200">SPACE CLASS BANK</span>
-          <button onClick={() => setLoginMode('None')} className="bg-black/30 p-1.5 rounded-full text-xs"><LogOut size={14}/></button>
+          <button onClick={handleLogout} className="bg-black/30 p-1.5 rounded-full text-xs"><LogOut size={14}/></button>
         </div>
         <p className="text-xs text-indigo-200">{currentUser?.name} ({currentUser?.job})</p>
         <div className="text-4xl font-black text-yellow-300 mt-1">{myBalance.toLocaleString()} <span className="text-lg text-yellow-400">안</span></div>
