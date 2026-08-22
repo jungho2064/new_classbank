@@ -76,6 +76,25 @@ export default function AdminPanel({
   const [posScore, setPosScore] = useState(0);
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
+  // 다중 펀드 관리 상태
+  const [fundsList, setFundsList] = useState<any[]>([]);
+  const [selectedFundId, setSelectedFundId] = useState<string>('');
+  const [newFundName, setNewFundName] = useState('');
+  const [newFundPenalty, setNewFundPenalty] = useState('10');
+  const loadFunds = async () => {
+    if (!supabase) return;
+    const { data } = await supabase.from('funds').select('*').order('id', { ascending: true });
+    if (data && data.length > 0) {
+      setFundsList(data);
+      if (!selectedFundId || !data.some(f => f.fund_id === selectedFundId)) {
+        setSelectedFundId(data[0].fund_id);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadFunds();
+  }, [adminTab]);
 
   // 상점 아이템 불러오기
   const loadShopItems = async () => {
@@ -1297,31 +1316,190 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 9. 펀드 컨트롤타워 */}
-        {adminTab === 'funds' && (
-          <div className="space-y-4">
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-              <h3 className="font-bold text-sm text-indigo-400">📈 펀드 지수 및 뉴스/힌트 업데이트</h3>
-              <p className="text-xs text-slate-300 font-bold">현재 지수: {fundData?.current_index || 1000}p</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><label className="text-slate-400">상승 점수 가산(+)</label><input type="number" value={posScore} onChange={e => setPosScore(Number(e.target.value))} className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold"/></div>
-                <div><label className="text-slate-400">하락 점수 감산(-)</label><input type="number" value={negScore} onChange={e => setNegScore(Number(e.target.value))} className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold"/></div>
-              </div>
-              <input type="text" placeholder="어제의 뉴스" value={fundNews} onChange={e => setFundNews(e.target.value)} className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs font-bold" />
-              <input type="text" placeholder="오늘의 이모저모 힌트" value={fundHint} onChange={e => setFundHint(e.target.value)} className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs font-bold" />
-              <button onClick={handleUpdateFundIndex} className="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">지표 반영 및 지수 갱신</button>
-            </div>
+        {/* 9. 다중 펀드 컨트롤타워 (상장, 운용, 지수 갱신, 정산) */}
+        {adminTab === 'funds' && (() => {
+          const currentFund = fundsList.find(f => f.fund_id === selectedFundId) || fundsList[0];
 
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-              <h3 className="font-bold text-sm text-indigo-400">🚀 전 대원 일괄 가입 엔진</h3>
-              <div className="flex gap-2">
-                <input type="number" placeholder="1인당 가입액" value={batchFundAmt} onChange={e => setBatchFundAmt(e.target.value)} className="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-bold" />
-                <button onClick={handleBatchFundBuy} className="bg-indigo-600 px-5 rounded-xl font-bold text-xs">일괄 가입 실행</button>
+          return (
+            <div className="space-y-4">
+              {/* 1. 신규 테마 펀드 상장 구역 */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                <h3 className="font-bold text-sm text-indigo-400">➕ 새로운 테마 펀드 상장 (개설)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <input 
+                    type="text" 
+                    placeholder="펀드 이름 (예: 바른생활 인덱스, 우주 테크)" 
+                    value={newFundName} 
+                    onChange={e => setNewFundName(e.target.value)} 
+                    className="sm:col-span-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" 
+                  />
+                  <input 
+                    type="number" 
+                    placeholder="중도해지 수수료율 (%)" 
+                    value={newFundPenalty} 
+                    onChange={e => setNewFundPenalty(e.target.value)} 
+                    className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-yellow-400 text-center outline-none focus:border-indigo-500" 
+                  />
+                </div>
+                <button 
+                  onClick={async () => {
+                    if (!newFundName.trim()) { 
+                      if (showAlert) showAlert('⚠️ 펀드 이름을 입력하세요.'); 
+                      return; 
+                    }
+                    const fId = `F_${Date.now()}`;
+                    await supabase.from('funds').insert([{
+                      fund_id: fId,
+                      name: newFundName.trim(),
+                      base_index: 1000,
+                      current_index: 1000,
+                      penalty_rate: parseInt(newFundPenalty || '10'),
+                      status: 'Active',
+                      news: '펀드가 정식 상장되었습니다.',
+                      hint: '오늘의 변수를 확인하세요.'
+                    }]);
+                    setNewFundName('');
+                    await loadFunds();
+                    if (loadData) await loadData();
+                    if (showAlert) showAlert(`🚀 [${newFundName.trim()}] 펀드가 성공적으로 상장되었습니다!`);
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl font-bold text-xs shadow-lg transition"
+                >
+                  새로운 펀드 상장하기
+                </button>
               </div>
-            </div>
-          </div>
-        )}
 
+              {/* 2. 상장된 펀드 선택 및 지표 갱신 */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                  <h3 className="font-bold text-sm text-indigo-400">📈 운용 중인 펀드 관제 및 지수 갱신</h3>
+                  <select 
+                    value={selectedFundId} 
+                    onChange={e => setSelectedFundId(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 p-2 rounded-xl text-xs font-bold text-white outline-none focus:border-indigo-500"
+                  >
+                    {fundsList.map(f => (
+                      <option key={f.fund_id} value={f.fund_id}>
+                        {f.name} ({f.status === 'Active' ? '운용 중' : '정산 완료'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {currentFund ? (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
+                      <div>
+                        <span className="font-bold text-white text-sm">{currentFund.name}</span>
+                        <span className="text-slate-400 ml-2">(중도환매 수수료: {currentFund.penalty_rate}%)</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs text-slate-400">현재 지수: </span>
+                        <span className="text-base font-black text-indigo-400">{currentFund.current_index || 1000}p</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-slate-400">상승 점수 가산 (+)</label>
+                        <input 
+                          type="number" 
+                          value={posScore} 
+                          onChange={e => setPosScore(Number(e.target.value))} 
+                          className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold text-emerald-400 text-center outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400">하락 점수 감산 (-)</label>
+                        <input 
+                          type="number" 
+                          value={negScore} 
+                          onChange={e => setNegScore(Number(e.target.value))} 
+                          className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 font-bold text-rose-400 text-center outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    </div>
+
+                    <input 
+                      type="text" 
+                      placeholder="어제의 뉴스 (예: 과제 제출률 100% 달성)" 
+                      value={fundNews} 
+                      onChange={e => setFundNews(e.target.value)} 
+                      className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs font-bold text-white outline-none focus:border-indigo-500" 
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="오늘의 이모저모 힌트 (예: 청소 구역 검사 예정)" 
+                      value={fundHint} 
+                      onChange={e => setFundHint(e.target.value)} 
+                      className="w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs font-bold text-white outline-none focus:border-indigo-500" 
+                    />
+
+                    <button 
+                      onClick={async () => {
+                        const cur = Number(currentFund.current_index || 1000);
+                        const nextIdx = Math.max(10, cur + posScore - negScore);
+                        await supabase.from('funds').update({
+                          current_index: nextIdx,
+                          news: fundNews || currentFund.news,
+                          hint: fundHint || currentFund.hint
+                        }).eq('fund_id', currentFund.fund_id);
+                        setPosScore(0); setNegScore(0); setFundNews(''); setFundHint('');
+                        await loadFunds();
+                        if (loadData) await loadData();
+                        if (showAlert) showAlert(`📈 [${currentFund.name}] 지수가 [${nextIdx}p]로 업데이트되었습니다!`);
+                      }}
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 py-2.5 rounded-xl font-bold text-xs shadow-lg transition"
+                    >
+                      지표 반영 및 지수 갱신
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 py-4 text-center">개설된 펀드가 없습니다. 상단에서 새 펀드를 개설하세요.</p>
+                )}
+              </div>
+
+              {/* 3. 선택된 펀드 전 대원 일괄 가입 엔진 */}
+              {currentFund && (
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                  <h3 className="font-bold text-sm text-indigo-400">🚀 [{currentFund.name}] 전 대원 일괄 가입 엔진</h3>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="1인당 가입액" 
+                      value={batchFundAmt} 
+                      onChange={e => setBatchFundAmt(e.target.value)} 
+                      className="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-bold text-yellow-400 outline-none focus:border-indigo-500" 
+                    />
+                    <button 
+                      onClick={async () => {
+                        const amt = parseInt(batchFundAmt);
+                        if (isNaN(amt) || amt <= 0) return;
+                        const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                        const approved = safeUsers.filter((u: any) => u.status === 'Approved');
+                        const rows: any[] = [];
+
+                        for (const u of approved) {
+                          const myBal = safeTrans.filter((t: any) => t && t.name === u.name && t.status !== 'Rejected' && t.status !== 'Deposit_Active').reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
+                          if (myBal >= amt) {
+                            rows.push({ date: nowStr, name: u.name, type: '펀드 가입', amount: -amt, note: `${currentFund.name}|${currentFund.current_index || 1000}`, status: `Fund_${currentFund.fund_id}` });
+                            rows.push({ date: nowStr, name: '국고(중앙은행)', type: '펀드 예치금', amount: amt, note: `${u.name} 일괄 가입 예치`, status: 'Success' });
+                          }
+                        }
+                        if (rows.length > 0) await supabase.from('transactions').insert(rows);
+                        if (loadData) await loadData();
+                        if (showAlert) showAlert(`🚀 ${rows.length / 2}명의 대원이 [${currentFund.name}]에 자동 가입되었습니다!`);
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 px-5 rounded-xl font-bold text-xs transition"
+                    >
+                      일괄 가입 실행
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {/* ================= 1. 전체 장부 감사 (학생명 검색 필터 적용) ================= */}
         {adminTab === 'audit' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
