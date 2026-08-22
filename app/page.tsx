@@ -535,6 +535,7 @@ export default function App() {
               <button onClick={() => setActiveTab('withdraw')} disabled={isProcessing} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 active:scale-95 transition disabled:opacity-50"><Receipt size={18} className="text-indigo-300"/> 현금출금</button>
               <button onClick={() => setActiveTab('payslip')} disabled={isProcessing} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 active:scale-95 transition disabled:opacity-50"><FileText size={18} className="text-emerald-400"/> 명세서</button>
               <button onClick={() => setActiveTab('settings')} disabled={isProcessing} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 active:scale-95 transition disabled:opacity-50"><Settings size={18} className="text-slate-400"/> 비번관리</button>
+              <button onClick={() => setActiveTab('fund')} disabled={isProcessing} className="bg-slate-900 border border-slate-800 p-3 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 active:scale-95 transition disabled:opacity-50"><TrendingUp size={18} className="text-purple-400"/> 펀드투자</button>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
               <h3 className="font-bold text-xs text-slate-400">최근 입출금 내역</h3>
@@ -760,6 +761,143 @@ export default function App() {
             <button onClick={async () => { await supabase!.from('users').update({ password: newLoginPw.trim() }).eq('name', currentUser?.name); setActiveTab('wallet'); showAlert('비밀번호 변경 완료!'); }} disabled={isProcessing} className="w-full bg-slate-800 active:scale-95 py-3 rounded-xl font-bold disabled:opacity-50">저장하기</button>
           </div>
         )}
+
+        {/* 📈 학생 펀드 투자 센터 */}
+        {activeTab === 'fund' && (() => {
+          const fundsArray = Array.isArray(fundData) ? fundData : (fundData ? [fundData] : []);
+
+          return (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-xs">
+              <div className="flex justify-between items-center pb-1 border-b border-slate-800">
+                <h2 className="font-bold text-purple-400 text-sm flex items-center gap-1.5">
+                  <span>📈</span> 학급 경제 펀드 투자 센터
+                </h2>
+                <button onClick={() => setActiveTab('wallet')} disabled={isProcessing} className="text-slate-400 hover:text-white p-1">
+                  <ChevronLeft size={18}/>
+                </button>
+              </div>
+
+              {fundsArray.length === 0 ? (
+                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-slate-500">
+                  현재 운용 중인 펀드 상품이 없습니다.
+                </div>
+              ) : (
+                fundsArray.map((f: any) => {
+                  const currIdx = Number(f.current_index || 1000);
+                  const baseIdx = Number(f.base_index || 1000);
+                  const totalYield = (((currIdx - baseIdx) / baseIdx) * 100).toFixed(1);
+
+                  // 내 가입 내역 확인
+                  const myFundTrans = myTrans.filter((t: any) => t.status === `Fund_${f.fund_id}`);
+                  let myInvestAmt = 0;
+                  let myCurrentVal = 0;
+
+                  myFundTrans.forEach((t: any) => {
+                    const amt = Math.abs(Number(t.amount || 0));
+                    const parts = (t.note || '').split('|');
+                    const entryIdx = parseFloat(parts[1]) || 1000;
+                    myInvestAmt += amt;
+                    myCurrentVal += Math.floor(amt * (currIdx / entryIdx));
+                  });
+
+                  const myYield = myInvestAmt > 0 ? (((myCurrentVal - myInvestAmt) / myInvestAmt) * 100).toFixed(1) : '0.0';
+                  const penaltyRate = Number(f.penalty_rate || 10);
+                  const refundNet = Math.floor(myCurrentVal * (1 - penaltyRate / 100));
+
+                  return (
+                    <div key={f.fund_id} className="bg-slate-950 border border-purple-500/30 p-4 rounded-xl space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-sm text-white">{f.name}</span>
+                        <span className={`text-xs font-black ${Number(totalYield) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {currIdx}p ({Number(totalYield) >= 0 ? `+${totalYield}` : totalYield}%)
+                        </span>
+                      </div>
+
+                      {f.news && (
+                        <div className="bg-slate-900/90 p-2.5 rounded-lg text-[11px] text-indigo-200 border border-indigo-500/20">
+                          📰 <b>[어제의 뉴스]</b> {f.news}
+                        </div>
+                      )}
+                      {f.hint && (
+                        <div className="bg-slate-900/90 p-2.5 rounded-lg text-[11px] text-amber-200 border border-amber-500/20">
+                          💡 <b>[오늘의 힌트]</b> {f.hint}
+                        </div>
+                      )}
+
+                      {/* 내 투자 현황 */}
+                      {myInvestAmt > 0 && (
+                        <div className="bg-purple-950/30 border border-purple-500/30 p-3 rounded-lg space-y-2">
+                          <div className="flex justify-between font-bold">
+                            <span className="text-purple-300">내 투자 원금: {myInvestAmt.toLocaleString()}안</span>
+                            <span className={Number(myYield) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                              평가액: {myCurrentVal.toLocaleString()}안 ({Number(myYield) >= 0 ? `+${myYield}` : myYield}%)
+                            </span>
+                          </div>
+
+                          <button 
+                            onClick={async () => {
+                              if (isFrozen) { showAlert('❄️ 방학 중에는 환매할 수 없습니다.'); return; }
+                              if (!confirm(`⚠️ 중도 해지 시 수수료(${penaltyRate}%)가 차감된 ${refundNet.toLocaleString()}안이 입금됩니다. 진행하시겠습니까?`)) return;
+
+                              await runStudentTask(`📈 [${f.name}] 중도 환매 처리 중...`, async () => {
+                                const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                                await supabase!.from('transactions').insert([
+                                  { date: nowStr, name: currentUser?.name, type: '펀드 환매', amount: refundNet, note: `${f.name} 조기 환매`, status: 'Success' },
+                                  { date: nowStr, name: '국고(중앙은행)', type: '펀드 환매 지급', amount: -refundNet, note: `${currentUser?.name} 환매`, status: 'Success' }
+                                ]);
+                                await supabase!.from('transactions').update({ status: `Fund_${f.fund_id}_Closed` }).eq('name', currentUser?.name).eq('status', `Fund_${f.fund_id}`);
+                                await loadData();
+                              });
+                              showAlert(`✅ [${f.name}] 환매 대금 ${refundNet.toLocaleString()}안이 입금되었습니다.`);
+                            }}
+                            disabled={isProcessing}
+                            className="w-full bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-200 py-1.5 rounded-lg font-bold text-[10px] active:scale-95 transition"
+                          >
+                            ⚡ 조기 환매 (수수료 {penaltyRate}% 차감 후 {refundNet.toLocaleString()}안 수령)
+                          </button>
+                        </div>
+                      )}
+
+                      {/* 신규 매수 폼 */}
+                      <div className="pt-2 border-t border-slate-800 flex gap-2">
+                        <input 
+                          type="number" 
+                          id={`fund-buy-${f.fund_id}`}
+                          placeholder="투자할 금액 (최소 10안)" 
+                          className="flex-1 bg-slate-900 border border-slate-700 p-2 rounded-lg text-white font-bold text-xs outline-none focus:border-purple-500"
+                        />
+                        <button 
+                          onClick={async () => {
+                            if (isFrozen) { showAlert('❄️ 방학 중에는 펀드에 투자할 수 없습니다.'); return; }
+                            const buyInput = document.getElementById(`fund-buy-${f.fund_id}`) as HTMLInputElement;
+                            const amt = parseInt(buyInput?.value || '0');
+                            if (isNaN(amt) || amt < 10) { showAlert('⚠️ 최소 10안 이상부터 투자 가능합니다.'); return; }
+                            if (myBalance < amt) { showAlert('❌ 통장 잔액이 부족합니다.'); return; }
+
+                            await runStudentTask(`📈 [${f.name}] 펀드 매수 중...`, async () => {
+                              const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                              await supabase!.from('transactions').insert([
+                                { date: nowStr, name: currentUser?.name, type: '펀드 가입', amount: -amt, note: `${f.name}|${currIdx}`, status: `Fund_${f.fund_id}` },
+                                { date: nowStr, name: '국고(중앙은행)', type: '펀드 예치금', amount: amt, note: `${currentUser?.name} 가입 예치`, status: 'Success' }
+                              ]);
+                              buyInput.value = '';
+                              await loadData();
+                            });
+                            showAlert(`🚀 [${f.name}] 펀드 ${amt.toLocaleString()}안 매수 완료!`);
+                          }}
+                          disabled={isProcessing}
+                          className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white px-4 py-2 rounded-lg font-bold text-xs transition"
+                        >
+                          매수
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })()}
 
         {activeTab === 'store' && (
           <div className="space-y-3">
