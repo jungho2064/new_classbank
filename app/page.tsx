@@ -427,7 +427,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 학생 메인 상단 헤더 (배정 좌석 & 낙찰 임대료 뱃지 연동) */}
+      {/* 💡 학생 메인 상단 헤더 (직업 + 단기 알바 + 좌석 및 낙찰가 연동) */}
       <header className="bg-gradient-to-b from-indigo-700 to-indigo-900 p-6 rounded-b-[2rem] shadow-xl">
         <div className="flex justify-between items-center mb-3">
           <span className="font-black text-xs text-indigo-200">SPACE CLASS BANK</span>
@@ -436,7 +436,18 @@ export default function App() {
           </button>
         </div>
 
-        <p className="text-xs text-indigo-200">{currentUser?.name} ({currentUser?.job})</p>
+        {/* 대원명 & 본직업 + 단기 알바 표시 */}
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-xs font-bold text-white">{currentUser?.name} 대원</span>
+          <span className="text-xs text-indigo-200">({currentUser?.job || '우주 시민'})</span>
+          {currentUser?.part_time_job && (
+            <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-500/30">
+              🛠️ 알바: {currentUser.part_time_job} (+{currentUser.bonus_salary || 0}안)
+            </span>
+          )}
+        </div>
+
+        {/* 통장 잔액 */}
         <div className="text-4xl font-black text-yellow-300 mt-1">
           {myBalance.toLocaleString()} <span className="text-lg text-yellow-400">안</span>
         </div>
@@ -453,12 +464,12 @@ export default function App() {
             </span>
           )}
 
-          {/* 🪑 본인 좌석 번호 및 낙찰가(주간 임대료) 뱃지 */}
+          {/* 🪑 본인 좌석 번호 및 낙찰가(주간 임대료) */}
           {(() => {
             const mySeat = seats.find((s: any) => s && s.owner === currentUser?.name);
             if (mySeat) {
               return (
-                <span className="bg-emerald-400/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-400/30 flex items-center gap-1">
+                <span className="bg-indigo-400/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-indigo-400/30 flex items-center gap-1">
                   🪑 좌석: {mySeat.seat}번 (주 {mySeat.rent || mySeat.floor_price || 30}안)
                 </span>
               );
