@@ -56,8 +56,11 @@ export default function App() {
   const [newLoginPw, setNewLoginPw] = useState('');
 
   const [selectedQr, setSelectedQr] = useState<any>(null);
+
+  // 💡 알림 팝업 및 로딩 인디케이터 상태
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [alertType, setAlertType] = useState<'info' | 'success' | 'warning' | 'error'>('info');
+  const [loadingText, setLoadingText] = useState<string | null>(null);
 
   const showAlert = (msg: string) => {
     setAlertMsg(msg);
@@ -122,36 +125,48 @@ export default function App() {
   const handleStudentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginName.trim() || !loginPw.trim()) { showAlert('⚠️ 이름과 비밀번호를 입력해주세요.'); return; }
-    const { data, error } = await supabase!.from('users').select('*').eq('name', loginName.trim()).eq('password', loginPw.trim()).single();
-    if (error || !data) { showAlert('❌ 대원 이름 또는 비밀번호가 틀렸습니다.'); return; }
-    if (data.status === 'Pending') { showAlert('⏳ 선생님의 승인을 기다리고 있습니다.'); return; }
-    setCurrentUser(data);
-    setLoginMode('Student');
-    loadBag(data.name);
-    showAlert(`🚀 ${data.name} 대원 환영합니다!`);
-    setLoginPw('');
+    
+    setLoadingText('로그인 확인 중...');
+    try {
+      const { data, error } = await supabase!.from('users').select('*').eq('name', loginName.trim()).eq('password', loginPw.trim()).single();
+      if (error || !data) { showAlert('❌ 대원 이름 또는 비밀번호가 틀렸습니다.'); return; }
+      if (data.status === 'Pending') { showAlert('⏳ 선생님의 승인을 기다리고 있습니다.'); return; }
+      setCurrentUser(data);
+      setLoginMode('Student');
+      loadBag(data.name);
+      showAlert(`🚀 ${data.name} 대원 환영합니다!`);
+      setLoginPw('');
+    } finally {
+      setLoadingText(null);
+    }
   };
-  // 로그아웃 처리 함수 (비밀번호 및 입력 필드 전체 초기화)
+
   const handleLogout = () => {
     setLoginMode('None');
     setCurrentUser(null);
-    setLoginName('');       // 대원 실명 초기화
-    setLoginPw('');         // 대원 비밀번호 초기화
-    setAdminPwInput('');    // 관리자 마스터 비밀번호 초기화
+    setLoginName('');
+    setLoginPw('');
+    setAdminPwInput('');
   };
 
   const handleStudentSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName.trim() || !regPw.trim()) { showAlert('⚠️ 필수 정보를 입력해주세요.'); return; }
-    const { error } = await supabase!.from('users').insert([{
-      name: regName.trim(), password: regPw.trim(), transfer_password: regTransferPw.trim() || regPw.trim(),
-      status: 'Pending', job: '우주 시민', loan_balance: 0, weekly_repay: 0
-    }]);
-    if (!error) {
-      showAlert('🎉 가입 신청 완료! 선생님의 승인 후 로그인하세요.');
-      setShowSignupModal(false);
-      loadData();
-    } else showAlert('⚠️ 이미 존재하는 이름입니다.');
+    
+    setLoadingText('회원가입 신청 접수 중...');
+    try {
+      const { error } = await supabase!.from('users').insert([{
+        name: regName.trim(), password: regPw.trim(), transfer_password: regTransferPw.trim() || regPw.trim(),
+        status: 'Pending', job: '우주 시민', loan_balance: 0, weekly_repay: 0
+      }]);
+      if (!error) {
+        showAlert('🎉 가입 신청 완료! 선생님의 승인 후 로그인하세요.');
+        setShowSignupModal(false);
+        await loadData();
+      } else showAlert('⚠️ 이미 존재하는 이름입니다.');
+    } finally {
+      setLoadingText(null);
+    }
   };
 
   const handleTransfer = async () => {
@@ -163,27 +178,38 @@ export default function App() {
     if (myBalance < amt + fee) { showAlert('⚠️ 잔액이 부족합니다.'); return; }
     if (transferPw !== currentUser?.transfer_password) { showAlert('❌ 2차 비밀번호가 틀렸습니다.'); return; }
 
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const rows: any[] = [
-      { date: nowStr, name: currentUser.name, type: '송금(출금)', amount: -amt, note: `${transferTarget} 송금`, status: 'Success' },
-      { date: nowStr, name: transferTarget, type: '송금(입금)', amount: amt, note: `${currentUser.name} 입금`, status: 'Success' }
-    ];
-    if (fee > 0) rows.push({ date: nowStr, name: currentUser.name, type: '송금 수수료', amount: -fee, note: '타행 송금 수수료', status: 'Success' });
-    await supabase!.from('transactions').insert(rows);
-    setTransferAmt(''); setTransferPw(''); setActiveTab('wallet');
-    await loadData();
-    showAlert(`💸 ${transferTarget} 대원에게 ${amt}안 송금 완료!`);
+    setLoadingText(`💸 [${transferTarget}] 대원에게 ${amt}안 송금 중...`);
+    try {
+      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const rows: any[] = [
+        { date: nowStr, name: currentUser.name, type: '송금(출금)', amount: -amt, note: `${transferTarget} 송금`, status: 'Success' },
+        { date: nowStr, name: transferTarget, type: '송금(입금)', amount: amt, note: `${currentUser.name} 입금`, status: 'Success' }
+      ];
+      if (fee > 0) rows.push({ date: nowStr, name: currentUser.name, type: '송금 수수료', amount: -fee, note: '타행 송금 수수료', status: 'Success' });
+      await supabase!.from('transactions').insert(rows);
+      setTransferAmt(''); setTransferPw(''); setActiveTab('wallet');
+      await loadData();
+      showAlert(`💸 ${transferTarget} 대원에게 ${amt}안 송금 완료!`);
+    } finally {
+      setLoadingText(null);
+    }
   };
 
   const handleWithdraw = async () => {
     const amt = parseInt(withdrawAmt);
     if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 금액을 확인하세요.'); return; }
     if (myBalance < amt) { showAlert('❌ 출금 신청 금액이 보유 잔액보다 많습니다.'); return; }
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '현금 출금', amount: -amt, note: '사전 신청', status: 'Pending_W' }]);
-    setWithdrawAmt(''); setWithdrawPw(''); setActiveTab('wallet');
-    await loadData();
-    showAlert('🏧 출금 신청 접수 완료!');
+    
+    setLoadingText('🏧 현금 출금 신청 중...');
+    try {
+      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '현금 출금', amount: -amt, note: '사전 신청', status: 'Pending_W' }]);
+      setWithdrawAmt(''); setWithdrawPw(''); setActiveTab('wallet');
+      await loadData();
+      showAlert('🏧 출금 신청 접수 완료!');
+    } finally {
+      setLoadingText(null);
+    }
   };
 
   const handleDeposit = async () => {
@@ -191,8 +217,6 @@ export default function App() {
     if (!depositOpen) { showAlert('🔒 현재 정기예금 가입 창구가 닫혀 있습니다.'); return; }
     const amt = parseInt(depositAmt);
     if (isNaN(amt) || amt < 10) { showAlert('⚠️ 최소 10안 이상부터 가능합니다.'); return; }
-    
-    // 💡 잔액 초과 가입 방지 검증 추가
     if (myBalance < amt) { showAlert(`❌ 보유 잔액(${myBalance}안)을 초과하여 예금에 가입할 수 없습니다.`); return; }
 
     const days = depositType === 'short' ? 7 : 28;
@@ -200,77 +224,70 @@ export default function App() {
     const expiry = new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     
-    await supabase!.from('transactions').insert([
-      { date: nowStr, name: currentUser?.name, type: '예금 가입', amount: -amt, note: `만기:${expiry}|이율:${rate}|원금:${amt}`, status: 'Deposit_Active' },
-      { date: nowStr, name: '국고(중앙은행)', type: '예금 예치금', amount: amt, note: `${currentUser?.name} 예금 수탁`, status: 'Success' }
-    ]);
-    
-    setDepositAmt(''); setDepositPw(''); setActiveTab('wallet');
-    await loadData();
-    showAlert(`🏦 정기예금(${rate}%) 가입 완료!`);
+    setLoadingText('🏛️ 정기예금 개설 중...');
+    try {
+      await supabase!.from('transactions').insert([
+        { date: nowStr, name: currentUser?.name, type: '예금 가입', amount: -amt, note: `만기:${expiry}|이율:${rate}|원금:${amt}`, status: 'Deposit_Active' },
+        { date: nowStr, name: '국고(중앙은행)', type: '예금 예치금', amount: amt, note: `${currentUser?.name} 예금 수탁`, status: 'Success' }
+      ]);
+      setDepositAmt(''); setDepositPw(''); setActiveTab('wallet');
+      await loadData();
+      showAlert(`🏦 정기예금(${rate}%) 가입 완료!`);
+    } finally {
+      setLoadingText(null);
+    }
   };
 
   const handleLoanRepay = async () => {
-  const currentLoan = Number(currentUser?.loan_balance || 0);
+    const currentLoan = Number(currentUser?.loan_balance || 0);
+    if (currentLoan <= 0) { showAlert('🎉 현재 갚아야 할 대출금이 없습니다.'); return; }
 
-  // 1. 갚을 대출이 없는 경우
-  if (currentLoan <= 0) {
-    showAlert('🎉 현재 갚아야 할 대출금이 없습니다.');
-    return;
-  }
+    const amt = parseInt(repayAmt);
+    if (isNaN(amt) || amt <= 0) { showAlert('⚠️ 상환할 금액을 정확히 입력하세요.'); return; }
+    if (amt > currentLoan) { showAlert(`⚠️ 남은 대출 잔액(${currentLoan}안) 이하로만 상환할 수 있습니다.`); return; }
+    if (myBalance < amt) { showAlert('❌ 통장 잔액이 부족하여 상환할 수 없습니다.'); return; }
+    if (repayPw !== currentUser?.transfer_password) { showAlert('❌ 결제용 비밀번호가 일치하지 않습니다.'); return; }
 
-  const amt = parseInt(repayAmt);
-  if (isNaN(amt) || amt <= 0) { 
-    showAlert('⚠️ 상환할 금액을 정확히 입력하세요.'); 
-    return; 
-  }
+    setLoadingText('대출금 상환 처리 중...');
+    try {
+      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      await supabase!.from('transactions').insert([
+        { date: nowStr, name: currentUser?.name, type: '자진 대출 상환', amount: -amt, note: '학생 직접 상환', status: 'Success' },
+        { date: nowStr, name: '국고(중앙은행)', type: '대출금 회수', amount: amt, note: `${currentUser?.name} 상환`, status: 'Success' }
+      ]);
 
-  // 2. 대출 잔액보다 더 많이 갚으려고 할 때
-  if (amt > currentLoan) {
-    showAlert(`⚠️ 남은 대출 잔액(${currentLoan}안) 이하로만 상환할 수 있습니다.`);
-    return;
-  }
+      const nextLoan = Math.max(0, currentLoan - amt);
+      await supabase!.from('users').update({ 
+        loan_balance: nextLoan, 
+        weekly_repay: nextLoan === 0 ? 0 : currentUser?.weekly_repay,
+        dunning: nextLoan === 0 ? '' : currentUser?.dunning 
+      }).eq('name', currentUser?.name);
 
-  // 3. 보유 잔액보다 많이 갚으려고 할 때 (자산 음수 방지)
-  if (myBalance < amt) {
-    showAlert('❌ 통장 잔액이 부족하여 상환할 수 없습니다.');
-    return;
-  }
-
-  if (repayPw !== currentUser?.transfer_password) { 
-    showAlert('❌ 결제용 비밀번호가 일치하지 않습니다.'); 
-    return; 
-  }
-
-  const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-  await supabase!.from('transactions').insert([
-    { date: nowStr, name: currentUser?.name, type: '자진 대출 상환', amount: -amt, note: '학생 직접 상환', status: 'Success' },
-    { date: nowStr, name: '국고(중앙은행)', type: '대출금 회수', amount: amt, note: `${currentUser?.name} 상환`, status: 'Success' }
-  ]);
-
-  const nextLoan = Math.max(0, currentLoan - amt);
-  await supabase!.from('users').update({ 
-    loan_balance: nextLoan, 
-    weekly_repay: nextLoan === 0 ? 0 : currentUser?.weekly_repay,
-    dunning: nextLoan === 0 ? '' : currentUser?.dunning 
-  }).eq('name', currentUser?.name);
-
-  setRepayAmt(''); setRepayPw(''); setActiveTab('wallet');
-  await loadData();
-  showAlert(`💸 ${amt}안 대출 상환이 완료되었습니다! (남은 대출: ${nextLoan}안)`);
-};
+      setRepayAmt(''); setRepayPw(''); setActiveTab('wallet');
+      await loadData();
+      showAlert(`💸 ${amt}안 대출 상환이 완료되었습니다! (남은 대출: ${nextLoan}안)`);
+    } finally {
+      setLoadingText(null);
+    }
+  };
 
   const handleBuyItem = async (item: any) => {
     if (isFrozen) { showAlert('❄️ 방학 중에는 상점을 이용할 수 없습니다.'); return; }
     if (myBalance < item.price) { showAlert('❌ 잔액이 부족하여 아이템을 구매할 수 없습니다.'); return; }
-    const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const serial = 'SN-' + Math.floor(100000 + Math.random() * 900000);
-    await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' }]);
-    await supabase!.from('inventory').insert([{ date: nowStr, name: currentUser?.name, item_id: item.item_id, item_name: item.name, serial, status: 'Unused', expiry: '2026-08-31' }]);
-    await supabase!.from('shop_items').update({ stock: item.stock - 1 }).eq('item_id', item.item_id);
-    await loadData();
-    await loadBag(currentUser?.name);
-    showAlert(`🎉 '${item.name}' 구매 완료! [가방]에서 확인하세요.`);
+    
+    setLoadingText(`🛒 [${item.name}] 구매 결제 진행 중...`);
+    try {
+      const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const serial = 'SN-' + Math.floor(100000 + Math.random() * 900000);
+      await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' }]);
+      await supabase!.from('inventory').insert([{ date: nowStr, name: currentUser?.name, item_id: item.item_id, item_name: item.name, serial, status: 'Unused', expiry: '2026-08-31' }]);
+      await supabase!.from('shop_items').update({ stock: item.stock - 1 }).eq('item_id', item.item_id);
+      await loadData();
+      await loadBag(currentUser?.name);
+      showAlert(`🎉 '${item.name}' 구매 완료! [가방]에서 확인하세요.`);
+    } finally {
+      setLoadingText(null);
+    }
   };
 
   // 관리자 패널 렌더링
@@ -287,8 +304,9 @@ export default function App() {
         setDepositOpen={setDepositOpen} 
         loadData={loadData} 
         showAlert={showAlert} 
-        alertMsg={alertMsg}       // 👈 추가
-        alertType={alertType}     // 👈 추가
+        alertMsg={alertMsg} 
+        alertType={alertType}
+        setLoadingText={setLoadingText}
         onLogout={handleLogout} 
       />
     );
@@ -396,6 +414,19 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* 💡 전역 로딩 스피너 */}
+        {loadingText && (
+          <div style={{ zIndex: 999999 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-auto">
+            <div className="bg-slate-900 border border-slate-700/80 p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 text-center max-w-xs mx-auto">
+              <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+              <div className="space-y-1">
+                <p className="font-bold text-sm text-white">{loadingText}</p>
+                <p className="text-[11px] text-slate-400">데이터를 안전하게 처리하고 있습니다...</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -423,6 +454,19 @@ export default function App() {
             <button type="button" onClick={() => setAlertMsg(null)} className="text-slate-400 hover:text-white ml-2 text-sm font-bold">
               ✕
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 💡 학생 메인 전역 로딩 스피너 */}
+      {loadingText && (
+        <div style={{ zIndex: 999999 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-auto">
+          <div className="bg-slate-900 border border-slate-700/80 p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 text-center max-w-xs mx-auto">
+            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+            <div className="space-y-1">
+              <p className="font-bold text-sm text-white">{loadingText}</p>
+              <p className="text-[11px] text-slate-400">데이터를 안전하게 처리하고 있습니다...</p>
+            </div>
           </div>
         </div>
       )}
@@ -650,55 +694,53 @@ export default function App() {
         )}
 
         {activeTab === 'loan' && (
-  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-    <div className="flex justify-between items-center">
-      <h2 className="font-bold text-rose-400 text-sm flex items-center gap-2">
-        <AlertTriangle size={16} /> 대출금 상환
-      </h2>
-      <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5">
-        <ChevronLeft size={14} /> 뒤로가기
-      </button>
-    </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="font-bold text-rose-400 text-sm flex items-center gap-2">
+                <AlertTriangle size={16} /> 대출금 상환
+              </h2>
+              <button onClick={() => setActiveTab('wallet')} className="text-xs text-slate-400 hover:text-white flex items-center gap-0.5">
+                <ChevronLeft size={14} /> 뒤로가기
+              </button>
+            </div>
 
-    {/* 대출 잔액이 0원 이하일 때 */}
-    {Number(currentUser?.loan_balance || 0) <= 0 ? (
-      <div className="p-8 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
-        <p className="text-3xl">🎉</p>
-        <p className="text-sm font-bold text-emerald-400">현재 갚아야 할 대출이 없습니다!</p>
-        <p className="text-xs text-slate-500">대출금이 발생하면 이곳에서 자진 상환할 수 있습니다.</p>
-      </div>
-    ) : (
-      /* 대출 잔액이 있을 때 상환 폼 */
-      <>
-        <div className="p-4 bg-rose-950/40 rounded-xl text-center border border-rose-500/20">
-          <p className="text-xs text-rose-300">현재 남은 대출 잔액</p>
-          <p className="text-2xl font-black text-rose-400">{currentUser?.loan_balance} 안</p>
-        </div>
-        <div className="space-y-2 text-xs">
-          <label className="block text-slate-400">상환할 금액 (최대 {currentUser?.loan_balance}안)</label>
-          <input 
-            type="number" 
-            placeholder="금액 입력" 
-            value={repayAmt} 
-            onChange={e => setRepayAmt(e.target.value)} 
-            className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-white"
-          />
-          <label className="block text-slate-400 pt-1">결제용 2차 비밀번호</label>
-          <input 
-            type="password" 
-            placeholder="••••" 
-            value={repayPw} 
-            onChange={e => setRepayPw(e.target.value)} 
-            className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-white"
-          />
-        </div>
-        <button onClick={handleLoanRepay} className="w-full bg-rose-600 hover:bg-rose-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">
-          대출금 상환하기
-        </button>
-      </>
-    )}
-  </div>
-)}
+            {Number(currentUser?.loan_balance || 0) <= 0 ? (
+              <div className="p-8 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
+                <p className="text-3xl">🎉</p>
+                <p className="text-sm font-bold text-emerald-400">현재 갚아야 할 대출이 없습니다!</p>
+                <p className="text-xs text-slate-500">대출금이 발생하면 이곳에서 자진 상환할 수 있습니다.</p>
+              </div>
+            ) : (
+              <>
+                <div className="p-4 bg-rose-950/40 rounded-xl text-center border border-rose-500/20">
+                  <p className="text-xs text-rose-300">현재 남은 대출 잔액</p>
+                  <p className="text-2xl font-black text-rose-400">{currentUser?.loan_balance} 안</p>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <label className="block text-slate-400">상환할 금액 (최대 {currentUser?.loan_balance}안)</label>
+                  <input 
+                    type="number" 
+                    placeholder="금액 입력" 
+                    value={repayAmt} 
+                    onChange={e => setRepayAmt(e.target.value)} 
+                    className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-white"
+                  />
+                  <label className="block text-slate-400 pt-1">결제용 2차 비밀번호</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••" 
+                    value={repayPw} 
+                    onChange={e => setRepayPw(e.target.value)} 
+                    className="w-full bg-slate-950 p-3 rounded-xl border border-slate-800 font-bold text-white"
+                  />
+                </div>
+                <button onClick={handleLoanRepay} className="w-full bg-rose-600 hover:bg-rose-500 py-3.5 rounded-xl font-bold text-xs shadow-lg transition">
+                  대출금 상환하기
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {activeTab === 'payslip' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
