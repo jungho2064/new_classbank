@@ -287,6 +287,8 @@ export default function App() {
         setDepositOpen={setDepositOpen} 
         loadData={loadData} 
         showAlert={showAlert} 
+        alertMsg={alertMsg}       // 👈 추가
+        alertType={alertType}     // 👈 추가
         onLogout={handleLogout} 
       />
     );
