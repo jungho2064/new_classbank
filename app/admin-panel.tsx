@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Award, DollarSign, Landmark, Building, 
-  Store, QrCode, TrendingUp, FileText, Settings, LogOut, Check, X, RefreshCw, Plus, Trash2
+  Store, QrCode, TrendingUp, FileText, Settings, LogOut, Check, X, RefreshCw, Plus, Trash2, Edit2, Search
 } from 'lucide-react';
 
 export default function AdminPanel({ 
@@ -24,11 +24,14 @@ export default function AdminPanel({
   const safeSeats = Array.isArray(seats) ? seats : [];
 
   const [adminTab, setAdminTab] = useState<'pending' | 'members' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'qr' | 'funds' | 'audit' | 'system'>('pending');
+  const [auditFilter, setAuditFilter] = useState<'student' | 'treasury' | 'all'>('student');
+  const [auditSearchName, setAuditSearchName] = useState(''); // 1. 장부 학생명 검색 필터
+
+  // 대원 현황 검색 & 정렬
   const [memberSearch, setMemberSearch] = useState('');
   const [memberSort, setMemberSort] = useState<'netWorth' | 'cash' | 'name'>('netWorth');
-  const [auditFilter, setAuditFilter] = useState<'student' | 'treasury' | 'all'>('student');
 
-  // 상/벌금
+  // 상/벌금 및 직접 수동 입출금
   const [rewardTarget, setRewardTarget] = useState('');
   const [rewardType, setRewardType] = useState<'상금(+)' | '벌금(-)' | '기타 입금(+)' | '기타 출금(-)'>('상금(+)');
   const [rewardAmt, setRewardAmt] = useState('');
@@ -38,18 +41,10 @@ export default function AdminPanel({
   const [taxRate, setTaxRate] = useState(10);
   const [maintRate, setMaintRate] = useState(5);
   const [customJobs, setCustomJobs] = useState<{ [key: string]: number }>({
-    '봉사위원': 180,
-    '분리배출': 160,
-    '우유 관리': 150,
-    '교실 바닥 쓸기': 150,
-    '특별구역 청소': 140,
-    '복도 쓸기': 140,
-    '창문관리 및 청소': 140,
-    '에너지 관리 및 피아노 설치': 140,
-    '책상 줄 맞추기': 130,
-    '배달부': 130,
-    '시간표 관리': 120,
-    '우주 시민': 140
+    '봉사위원': 180, '분리배출': 160, '우유 관리': 150, '교실 바닥 쓸기': 150,
+    '특별구역 청소': 140, '복도 쓸기': 140, '창문관리 및 청소': 140,
+    '에너지 관리 및 피아노 설치': 140, '책상 줄 맞추기': 130, '배달부': 130,
+    '시간표 관리': 120, '우주 시민': 140
   });
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newJobSalary, setNewJobSalary] = useState('');
@@ -60,13 +55,15 @@ export default function AdminPanel({
   const [loanRate, setLoanRate] = useState('5.0');
   const [globalLoanRate, setGlobalLoanRate] = useState('5.0');
 
-  // 상점 신규 등록
+  // 상점 관리 & 신규 등록
+  const [shopItemsList, setShopItemsList] = useState<any[]>([]);
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemStock, setNewItemStock] = useState('10');
   const [newItemMax, setNewItemMax] = useState('1');
   const [newItemPromo, setNewItemPromo] = useState(false);
   const [newItemDesc, setNewItemDesc] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   // QR 검증
   const [serialInput, setSerialInput] = useState('');
@@ -77,6 +74,17 @@ export default function AdminPanel({
   const [posScore, setPosScore] = useState(0);
   const [negScore, setNegScore] = useState(0);
   const [batchFundAmt, setBatchFundAmt] = useState('40');
+
+  // 상점 아이템 불러오기
+  const loadShopItems = async () => {
+    if (!supabase) return;
+    const { data } = await supabase.from('shop_items').select('*').order('created_at', { ascending: false });
+    setShopItemsList(data || []);
+  };
+
+  useEffect(() => {
+    loadShopItems();
+  }, [adminTab]);
 
   // 승인/거절 핸들러 (환불 시 +금액 기록)
   const handleResolvePending = async (tId: number, status: 'Success' | 'Rejected', name: string, isWithdrawal: boolean, amount?: number) => {
@@ -130,7 +138,6 @@ export default function AdminPanel({
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     const isDeduction = rewardType === '벌금(-)' || rewardType === '기타 출금(-)';
 
-    // 1. 차감(-) 로직 및 잔액 부족 시 대출 강제 전환
     if (isDeduction) {
       const { data: userTrans } = await supabase
         .from('transactions')
@@ -173,7 +180,6 @@ export default function AdminPanel({
       }
     }
 
-    // 2. 정상 입출금 반영
     const val = isDeduction ? -amt : amt;
     const treasuryType = isDeduction 
       ? (rewardType === '벌금(-)' ? '벌금 수입' : '국고 수입') 
@@ -203,7 +209,7 @@ export default function AdminPanel({
     if (showAlert) showAlert(`✅ ${rewardTarget} 대원에게 [${rewardType} ${amt}안] 처리가 완료되었습니다.`);
   };
 
-  // 주급 일괄 지급 (본봉 + 단기 알바 수당 합산 지급)
+  // 주급 일괄 지급 (본봉 + 단기 알바 수당 합산)
   const handlePaySalaries = async () => {
     if (!supabase) return;
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
@@ -284,32 +290,61 @@ export default function AdminPanel({
     if (showAlert) showAlert(`✅ 일괄 이율 ${rate}%가 적용되었습니다.`);
   };
 
-  // 임대료 징수 및 재산정
+  // ================= 3. 부동산 기능 (자리 배정 / 임대료 징수 / 경매시작가 재산정) =================
+  // 자리 배정 및 임대료/낙찰가 개별 설정
+  const handleUpdateSeat = async (seatNo: number) => {
+    if (!supabase) return;
+    const ownerInput = (document.getElementById(`owner-${seatNo}`) as HTMLSelectElement)?.value || '';
+    const rentInput = parseInt((document.getElementById(`rent-${seatNo}`) as HTMLInputElement)?.value || '30');
+    const floorInput = parseInt((document.getElementById(`floor-${seatNo}`) as HTMLInputElement)?.value || '30');
+
+    await supabase.from('real_estate').update({
+      owner: ownerInput,
+      rent: rentInput,
+      floor_price: floorInput
+    }).eq('seat', seatNo);
+
+    if (loadData) await loadData();
+    if (showAlert) showAlert(`✅ ${seatNo}번 좌석 정보가 저장되었습니다.`);
+  };
+
+  // 임대료 징수
   const handleCollectRent = async () => {
     if (!supabase) return;
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     const rows: any[] = [];
+    
     for (const s of safeSeats.filter((seat: any) => seat && seat.owner)) {
-      rows.push({ date: nowStr, name: s.owner, type: '임대료 납부', amount: -Number(s.rent || s.floor_price || 0), note: `${s.seat}번 좌석`, status: 'Success' });
-      rows.push({ date: nowStr, name: '국고(중앙은행)', type: '임대료 수입', amount: Number(s.rent || s.floor_price || 0), note: `${s.owner} 임대료`, status: 'Success' });
+      const rentAmt = Number(s.rent || s.floor_price || 30);
+      rows.push({ date: nowStr, name: s.owner, type: '임대료 납부', amount: -rentAmt, note: `${s.seat}번 좌석 주간 임대료`, status: 'Success' });
+      rows.push({ date: nowStr, name: '국고(중앙은행)', type: '임대료 수입', amount: rentAmt, note: `${s.owner} 임대료`, status: 'Success' });
     }
+
     if (rows.length > 0) await supabase.from('transactions').insert(rows);
     if (loadData) await loadData();
     if (showAlert) showAlert('💸 모든 입주 학생의 임대료 징수가 완료되었습니다!');
   };
 
+  // 경매 시작가 재산정 공식 적용: (경매 시작가) = (직전 낙찰가)*0.8 + (현재 낙찰가)*0.2
   const handleResetEstateSeason = async () => {
     if (!supabase) return;
     for (const s of safeSeats) {
-      const oldFloor = Number(s.floor_price || 30);
-      const rentVal = Number(s.rent || oldFloor);
-      let newFloor = oldFloor;
-      if (rentVal > oldFloor) newFloor = Math.min(500, Math.floor((oldFloor * 0.8) + (rentVal * 0.2)));
-      else if (rentVal === 0 || !s.owner) newFloor = Math.max(10, Math.floor(oldFloor * 0.9));
-      await supabase.from('real_estate').update({ floor_price: newFloor, rent: newFloor, owner: '' }).eq('seat', s.seat);
+      const prevFloor = Number(s.floor_price || 30); // 직전 기준가/낙찰가
+      const currentWinningBid = Number(s.rent || prevFloor); // 이번 시즌 실제 낙찰/임대가
+      
+      // 공식: (직전 낙찰가 * 0.8) + (현재 낙찰가 * 0.2)
+      let calculatedFloor = Math.floor((prevFloor * 0.8) + (currentWinningBid * 0.2));
+      calculatedFloor = Math.max(10, Math.min(1000, calculatedFloor)); // 10안 ~ 1000안 범위 안전장치
+
+      await supabase.from('real_estate').update({
+        floor_price: calculatedFloor,
+        rent: calculatedFloor,
+        owner: '' // 새 시즌 시작을 위해 거주자 초기화(공실 전환)
+      }).eq('seat', s.seat);
     }
+
     if (loadData) await loadData();
-    if (showAlert) showAlert('🔄 거품 방지 공식이 적용되어 모든 좌석의 새 시즌 가격이 책정되었습니다.');
+    if (showAlert) showAlert('🔄 공식[(직전가×0.8)+(현재가×0.2)]이 적용되어 전 좌석의 새 시즌 경매 시작가가 책정되고 공실 처리되었습니다.');
   };
 
   // 만기 예금 일괄 지급
@@ -342,7 +377,7 @@ export default function AdminPanel({
     if (showAlert) showAlert('💰 만기 도래 예금의 원리금 지급 및 세금 원천징수가 완료되었습니다!');
   };
 
-  // 신규 상품 등록
+  // ================= 2. 상점 아이템 등록 / 수정 / 삭제 / 특가 토글 =================
   const handleRegisterShopItem = async () => {
     if (!supabase) return;
     if (!newItemName.trim() || !newItemPrice) {
@@ -350,13 +385,50 @@ export default function AdminPanel({
       return;
     }
     await supabase.from('shop_items').insert([{
-      item_id: `I_${Date.now()}`, name: newItemName.trim(), price: parseInt(newItemPrice),
-      stock: parseInt(newItemStock || '10'), max_per_user: parseInt(newItemMax || '1'),
-      promotion: newItemPromo ? '특가' : '', description: newItemDesc.trim(), status: 'Active'
+      item_id: `I_${Date.now()}`, 
+      name: newItemName.trim(), 
+      price: parseInt(newItemPrice),
+      stock: parseInt(newItemStock || '10'), 
+      max_per_user: parseInt(newItemMax || '1'),
+      promotion: newItemPromo ? '특가' : '', 
+      description: newItemDesc.trim(), 
+      status: 'Active'
     }]);
     setNewItemName(''); setNewItemPrice(''); setNewItemDesc('');
+    await loadShopItems();
     if (loadData) await loadData();
     if (showAlert) showAlert('🛍️ 새 상품이 상점에 정상 등록되었습니다.');
+  };
+
+  const handleUpdateShopItem = async (item: any) => {
+    if (!supabase) return;
+    const price = parseInt((document.getElementById(`price-${item.id}`) as HTMLInputElement)?.value || String(item.price));
+    const stock = parseInt((document.getElementById(`stock-${item.id}`) as HTMLInputElement)?.value || String(item.stock));
+    const name = (document.getElementById(`name-${item.id}`) as HTMLInputElement)?.value || item.name;
+
+    await supabase.from('shop_items').update({ price, stock, name }).eq('id', item.id);
+    setEditingItemId(null);
+    await loadShopItems();
+    if (loadData) await loadData();
+    if (showAlert) showAlert(`✅ [${name}] 상품 정보가 수정되었습니다.`);
+  };
+
+  const handleTogglePromo = async (item: any) => {
+    if (!supabase) return;
+    const nextPromo = item.promotion === '특가' ? '' : '특가';
+    await supabase.from('shop_items').update({ promotion: nextPromo }).eq('id', item.id);
+    await loadShopItems();
+    if (loadData) await loadData();
+    if (showAlert) showAlert(`🏷️ [${item.name}] 특가 세일 뱃지가 ${nextPromo ? 'ON' : 'OFF'} 되었습니다.`);
+  };
+
+  const handleDeleteShopItem = async (id: number) => {
+    if (!supabase) return;
+    if (!confirm('정말 이 상품을 삭제하시겠습니까?')) return;
+    await supabase.from('shop_items').delete().eq('id', id);
+    await loadShopItems();
+    if (loadData) await loadData();
+    if (showAlert) showAlert('🗑️ 상품이 삭제되었습니다.');
   };
 
   // QR 검증
@@ -437,8 +509,8 @@ export default function AdminPanel({
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
           {[
             { id: 'pending', label: '🔔 승인대기' },
-            { id: 'members', label: '👥 대원현황' }, // 👈 추가
-            { id: 'reward', label: '🏆 상/벌금' },
+            { id: 'members', label: '👥 대원현황' },
+            { id: 'reward', label: '🏆 수동입출금' },
             { id: 'salary', label: '💸 주급정산' },
             { id: 'loans', label: '🏦 대출/독촉' },
             { id: 'estate', label: '🏠 부동산' },
@@ -482,25 +554,20 @@ export default function AdminPanel({
             </div>
           </div>
         )}
+
         {/* 1-2. 대원 전체 자산 & 직업 모니터링 대시보드 */}
         {adminTab === 'members' && (() => {
           const currentFundIdx = Number(fundData?.current_index || 1000);
 
-          // 학생별 실시간 자산 집계
           const studentStats = safeUsers
             .filter((u: any) => u && u.status === 'Approved')
             .map((u: any) => {
               const uTrans = safeTrans.filter((t: any) => t && t.name === u.name && t.status !== 'System' && t.status !== 'Rejected');
-              
-              // 1. 현금 잔액 (예금 제외 실 잔여금)
               const cash = uTrans.reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
-              
-              // 2. 예금 잔액
               const deposit = uTrans
                 .filter((t: any) => t.status === 'Deposit_Active')
                 .reduce((a: any, c: any) => a + Math.abs(Number(c.amount || 0)), 0);
 
-              // 3. 펀드 평가액 계산
               const fundTrans = uTrans.filter((t: any) => t.status?.startsWith('Fund_'));
               let fundEst = 0;
               fundTrans.forEach((t: any) => {
@@ -510,23 +577,12 @@ export default function AdminPanel({
                 fundEst += Math.floor(buyAmt * (currentFundIdx / baseIdx));
               });
 
-              // 4. 대출 잔액
               const loan = Number(u.loan_balance || 0);
-
-              // 5. 순자산 (현금 + 예금 + 펀드 - 대출)
               const netWorth = cash + deposit + fundEst - loan;
 
-              return {
-                ...u,
-                cash,
-                deposit,
-                fundEst,
-                loan,
-                netWorth
-              };
+              return { ...u, cash, deposit, fundEst, loan, netWorth };
             });
 
-          // 필터 및 정렬
           const filtered = studentStats
             .filter((s: any) => s.name.includes(memberSearch.trim()))
             .sort((a: any, b: any) => {
@@ -552,7 +608,6 @@ export default function AdminPanel({
                 </div>
               </div>
 
-              {/* 검색 및 정렬 바 */}
               <div className="flex gap-2 text-xs">
                 <input 
                   type="text" 
@@ -572,7 +627,6 @@ export default function AdminPanel({
                 </select>
               </div>
 
-              {/* 대원 자산 표 */}
               <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
                 <div className="max-h-[480px] overflow-y-auto">
                   <table className="w-full text-[11px] text-left">
@@ -627,7 +681,7 @@ export default function AdminPanel({
           );
         })()}
 
-        {/* 2. 상/벌금 및 직접 수동 입출금 */}
+        {/* 2. 수동 입출금 관리 (상/벌금 및 직접 사유) */}
         {adminTab === 'reward' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
             <div>
@@ -668,7 +722,7 @@ export default function AdminPanel({
 
               <input 
                 type="text" 
-                placeholder="지급/차감 사유 (예: 퀴즈 우승, 재료비)" 
+                placeholder="사유 (예: 퀴즈 우승, 교구 파손)" 
                 value={rewardReason} 
                 onChange={e => setRewardReason(e.target.value)} 
                 className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white outline-none focus:border-indigo-500" 
@@ -943,29 +997,92 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 5. 좌석 부동산 */}
+        {/* ================= 3. 좌석 부동산 관리 (배정/임대료/공식 재산정) ================= */}
         {adminTab === 'estate' && (
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-sm text-indigo-400">🗺️ 교실 좌석 부동산 관리 (1~25번)</h3>
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-5">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="font-bold text-sm text-indigo-400">🗺️ 교실 좌석 부동산 관리 (1~25번)</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  좌석별 낙찰 대원을 배정하고 임대료를 징수합니다. 시즌 종료 시 <b>(직전가×0.8 + 현재가×0.2)</b> 공식으로 새 시작가가 책정됩니다.
+                </p>
+              </div>
               <div className="flex gap-2">
-                <button onClick={handleCollectRent} className="bg-indigo-600 px-3 py-1.5 rounded-lg text-xs font-bold">임대료 일괄 징수</button>
-                <button onClick={handleResetEstateSeason} className="bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-3 py-1.5 rounded-lg font-bold text-xs">거품 방지 시즌 재산정</button>
+                <button onClick={handleCollectRent} className="bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 rounded-xl text-xs font-bold shadow-lg transition">
+                  임대료 일괄 징수
+                </button>
+                <button onClick={handleResetEstateSeason} className="bg-amber-600 hover:bg-amber-500 px-3.5 py-2 rounded-xl font-bold text-xs shadow-lg transition">
+                  새 시즌 경매시작가 재산정
+                </button>
               </div>
             </div>
-            <div className="grid grid-cols-5 gap-2 text-center text-xs">
-              {safeSeats.map((s: any) => (
-                <div key={s.seat} className={`p-2.5 rounded-xl border ${s.owner ? 'bg-indigo-950/60 border-indigo-500' : 'bg-slate-950 border-slate-800'}`}>
-                  <p className="font-bold">{s.seat}번</p>
-                  <p className="text-[10px] text-yellow-400 font-bold">{s.floor_price}안</p>
-                  <p className="text-[10px] text-slate-400 truncate">{s.owner || '공실'}</p>
-                </div>
-              ))}
+
+            {/* 좌석 그리드 배정 & 가격 설정 카드 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-h-[520px] overflow-y-auto pr-1">
+              {Array.from({ length: 25 }, (_, i) => i + 1).map((seatNo) => {
+                const s = safeSeats.find((seat: any) => Number(seat.seat) === seatNo) || { seat: seatNo, floor_price: 30, rent: 30, owner: '' };
+                const isOccupied = !!s.owner;
+
+                return (
+                  <div key={seatNo} className={`p-3.5 rounded-xl border transition ${isOccupied ? 'bg-indigo-950/40 border-indigo-500/50' : 'bg-slate-950 border-slate-800'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-xs text-white">🪑 {seatNo}번 좌석</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOccupied ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-400'}`}>
+                        {isOccupied ? '입주완료' : '공실'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-[11px]">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">낙찰/배정 대원</label>
+                        <select 
+                          id={`owner-${seatNo}`}
+                          defaultValue={s.owner || ''} 
+                          className="w-full bg-slate-900 border border-slate-700 p-1.5 rounded-lg text-white font-bold outline-none focus:border-indigo-500 text-xs"
+                        >
+                          <option value="">공실 (없음)</option>
+                          {safeUsers.filter((u: any) => u && u.status === 'Approved').map((u: any) => (
+                            <option key={u.id} value={u.name}>{u.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">경매시작가</label>
+                          <input 
+                            type="number" 
+                            id={`floor-${seatNo}`}
+                            defaultValue={s.floor_price || 30}
+                            className="w-full bg-slate-900 border border-slate-700 p-1 rounded-lg text-yellow-400 font-bold text-center text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">낙찰가(임대료)</label>
+                          <input 
+                            type="number" 
+                            id={`rent-${seatNo}`}
+                            defaultValue={s.rent || s.floor_price || 30}
+                            className="w-full bg-slate-900 border border-slate-700 p-1 rounded-lg text-emerald-400 font-bold text-center text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => handleUpdateSeat(seatNo)}
+                        className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-1.5 rounded-lg font-bold text-[11px] transition"
+                      >
+                        저장
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* 6. 예금 관리 & 학생별 가입 현황 */}
+        {/* 6. 예금 관리 */}
         {adminTab === 'deposits' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-5">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-4 border-b border-slate-800">
@@ -981,7 +1098,6 @@ export default function AdminPanel({
               </button>
             </div>
 
-            {/* 학생별 예금 가입 현황 목록 */}
             <div className="space-y-3">
               <h4 className="font-bold text-xs text-slate-300 flex items-center gap-1.5">
                 <span>📋</span> 현재 운용 중인 학생 예금 목록 ({safeTrans.filter((t: any) => t && t.status === 'Deposit_Active').length}건)
@@ -1044,20 +1160,111 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 7. 상점 / 재고 관리 */}
+        {/* ================= 2. 상점 관리 & 신규 등록 / 목록 수정 / 특가 토글 ================= */}
         {adminTab === 'store' && (
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-bold text-sm text-indigo-400">🛍️ 신규 아이템 등록</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-              <input type="text" placeholder="아이템 이름" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold" />
-              <input type="number" placeholder="가격 (안)" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold" />
-              <input type="number" placeholder="재고 수량" value={newItemStock} onChange={e => setNewItemStock(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold" />
-              <input type="text" placeholder="설명" value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold" />
+          <div className="space-y-5">
+            {/* 신규 상품 등록 폼 */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="font-bold text-sm text-indigo-400">🛍️ 신규 아이템 등록</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <input type="text" placeholder="아이템 이름" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
+                <input type="number" placeholder="가격 (안)" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
+                <input type="number" placeholder="재고 수량" value={newItemStock} onChange={e => setNewItemStock(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
+                <input type="text" placeholder="설명 (선택)" value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
+              </div>
+              <div className="flex justify-between items-center">
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={newItemPromo} onChange={e => setNewItemPromo(e.target.checked)} className="rounded accent-indigo-600" /> 
+                  <span>📢 '특가 세일' 뱃지 달기</span>
+                </label>
+                <button onClick={handleRegisterShopItem} className="bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 rounded-xl font-bold text-xs shadow-lg transition">
+                  상점에 아이템 출시
+                </button>
+              </div>
             </div>
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <input type="checkbox" checked={newItemPromo} onChange={e => setNewItemPromo(e.target.checked)} /> 📢 '특가 세일' 뱃지 달기
-            </label>
-            <button onClick={handleRegisterShopItem} className="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">상점에 아이템 출시</button>
+
+            {/* 등록된 상점 아이템 목록 (수정 / 삭제 / 특가 토글) */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-sm text-indigo-400">📦 상점 판매 아이템 관리 ({shopItemsList.length}개)</h3>
+                <button onClick={loadShopItems} className="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                  <RefreshCw size={12}/> 새로고침
+                </button>
+              </div>
+
+              {shopItemsList.length === 0 ? (
+                <p className="text-xs text-slate-500 py-4 text-center">등록된 상품이 없습니다.</p>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {shopItemsList.map((item: any) => (
+                    <div key={item.id} className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 text-xs">
+                      <div className="flex items-center gap-2 flex-1">
+                        <input 
+                          type="text" 
+                          id={`name-${item.id}`} 
+                          defaultValue={item.name} 
+                          className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-white font-bold text-xs outline-none focus:border-indigo-500"
+                        />
+                        {item.promotion === '특가' && (
+                          <span className="bg-rose-500/20 text-rose-300 text-[10px] font-bold px-2 py-0.5 rounded border border-rose-500/30">
+                            특가 세일
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400">가격</span>
+                          <input 
+                            type="number" 
+                            id={`price-${item.id}`} 
+                            defaultValue={item.price} 
+                            className="w-16 bg-slate-900 border border-slate-700 px-1.5 py-1 rounded text-yellow-400 font-bold text-center outline-none"
+                          />
+                          <span className="text-slate-400 text-[10px]">안</span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400">재고</span>
+                          <input 
+                            type="number" 
+                            id={`stock-${item.id}`} 
+                            defaultValue={item.stock} 
+                            className="w-14 bg-slate-900 border border-slate-700 px-1.5 py-1 rounded text-white font-bold text-center outline-none"
+                          />
+                          <span className="text-slate-400 text-[10px]">개</span>
+                        </div>
+
+                        <button 
+                          onClick={() => handleTogglePromo(item)}
+                          className={`px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${
+                            item.promotion === '특가' 
+                              ? 'bg-rose-600 text-white border-rose-500' 
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          특가 {item.promotion === '특가' ? 'ON' : 'OFF'}
+                        </button>
+
+                        <button 
+                          onClick={() => handleUpdateShopItem(item)}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-lg font-bold text-[10px] transition"
+                        >
+                          수정 저장
+                        </button>
+
+                        <button 
+                          onClick={() => handleDeleteShopItem(item.id)}
+                          className="bg-rose-950/60 hover:bg-rose-900 border border-rose-600/40 text-rose-300 p-1.5 rounded-lg transition"
+                        >
+                          <Trash2 size={13}/>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1098,38 +1305,64 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 10. 전체 장부 감사 (학생/국고 분리) */}
+        {/* ================= 1. 전체 장부 감사 (학생명 검색 필터 적용) ================= */}
         {adminTab === 'audit' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-2">
               <h3 className="font-bold text-sm text-indigo-400">📜 거래 장부 감사(Audit)</h3>
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-                <button 
-                  onClick={() => setAuditFilter('student')} 
-                  className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'student' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-                >
-                  👤 학생 거래 장부
-                </button>
-                <button 
-                  onClick={() => setAuditFilter('treasury')} 
-                  className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'treasury' ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
-                >
-                  🏛️ 국고 장부
-                </button>
-                <button 
-                  onClick={() => setAuditFilter('all')} 
-                  className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
-                >
-                  통합 전체
-                </button>
+              
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 🔍 1. 학생명 검색창 */}
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    placeholder="학생명 검색..." 
+                    value={auditSearchName} 
+                    onChange={e => setAuditSearchName(e.target.value)} 
+                    className="bg-slate-950 border border-slate-800 px-3 py-1.5 pl-8 rounded-xl text-xs text-white placeholder-slate-500 font-bold outline-none focus:border-indigo-500"
+                  />
+                  <Search size={13} className="absolute left-2.5 top-2.5 text-slate-500" />
+                  {auditSearchName && (
+                    <button 
+                      onClick={() => setAuditSearchName('')}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs font-bold"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                  <button 
+                    onClick={() => setAuditFilter('student')} 
+                    className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'student' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+                  >
+                    👤 학생
+                  </button>
+                  <button 
+                    onClick={() => setAuditFilter('treasury')} 
+                    className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'treasury' ? 'bg-amber-600 text-white' : 'text-slate-400'}`}
+                  >
+                    🏛️ 국고
+                  </button>
+                  <button 
+                    onClick={() => setAuditFilter('all')} 
+                    className={`px-3 py-1.5 rounded-lg font-bold transition ${auditFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
+                  >
+                    전체
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5 max-h-96 overflow-y-auto">
+            <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
               {safeTrans
                 .filter((t: any) => {
-                  if (auditFilter === 'student') return t.name !== '국고(중앙은행)';
-                  if (auditFilter === 'treasury') return t.name === '국고(중앙은행)';
+                  // 1) 탭 필터
+                  if (auditFilter === 'student' && t.name === '국고(중앙은행)') return false;
+                  if (auditFilter === 'treasury' && t.name !== '국고(중앙은행)') return false;
+                  // 2) 학생명 검색어 필터
+                  if (auditSearchName.trim() && !t.name?.includes(auditSearchName.trim())) return false;
                   return true;
                 })
                 .map((t: any) => {
