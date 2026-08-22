@@ -81,6 +81,8 @@ export default function AdminPanel({
   const [selectedFundId, setSelectedFundId] = useState<string>('');
   const [newFundName, setNewFundName] = useState('');
   const [newFundPenalty, setNewFundPenalty] = useState('10');
+
+  // DB에서 실시간 펀드 목록 불러오기
   const loadFunds = async () => {
     if (!supabase) return;
     const { data } = await supabase.from('funds').select('*').order('id', { ascending: true });
@@ -89,6 +91,8 @@ export default function AdminPanel({
       if (!selectedFundId || !data.some(f => f.fund_id === selectedFundId)) {
         setSelectedFundId(data[0].fund_id);
       }
+    } else {
+      setFundsList([]);
     }
   };
 
@@ -1324,7 +1328,12 @@ export default function AdminPanel({
             <div className="space-y-4">
               {/* 1. 신규 테마 펀드 상장 구역 */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-                <h3 className="font-bold text-sm text-indigo-400">➕ 새로운 테마 펀드 상장 (개설)</h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-sm text-indigo-400">➕ 새로운 테마 펀드 상장 (개설)</h3>
+                  <button onClick={loadFunds} className="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                    <RefreshCw size={12}/> 새로고침
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <input 
                     type="text" 
@@ -1363,7 +1372,7 @@ export default function AdminPanel({
                     if (loadData) await loadData();
                     if (showAlert) showAlert(`🚀 [${newFundName.trim()}] 펀드가 성공적으로 상장되었습니다!`);
                   }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl font-bold text-xs shadow-lg transition"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 py-2.5 rounded-xl font-bold text-xs shadow-lg transition"
                 >
                   새로운 펀드 상장하기
                 </button>
@@ -1372,23 +1381,25 @@ export default function AdminPanel({
               {/* 2. 상장된 펀드 선택 및 지표 갱신 */}
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                  <h3 className="font-bold text-sm text-indigo-400">📈 운용 중인 펀드 관제 및 지수 갱신</h3>
-                  <select 
-                    value={selectedFundId} 
-                    onChange={e => setSelectedFundId(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 p-2 rounded-xl text-xs font-bold text-white outline-none focus:border-indigo-500"
-                  >
-                    {fundsList.map(f => (
-                      <option key={f.fund_id} value={f.fund_id}>
-                        {f.name} ({f.status === 'Active' ? '운용 중' : '정산 완료'})
-                      </option>
-                    ))}
-                  </select>
+                  <h3 className="font-bold text-sm text-indigo-400">📈 운용 중인 펀드 관제 및 지수 갱신 ({fundsList.length}개)</h3>
+                  {fundsList.length > 0 && (
+                    <select 
+                      value={selectedFundId} 
+                      onChange={e => setSelectedFundId(e.target.value)}
+                      className="bg-slate-950 border border-slate-800 p-2 rounded-xl text-xs font-bold text-white outline-none focus:border-indigo-500"
+                    >
+                      {fundsList.map(f => (
+                        <option key={f.fund_id} value={f.fund_id}>
+                          {f.name} ({f.current_index || 1000}p)
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {currentFund ? (
                   <div className="space-y-3 pt-2">
-                    <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
+                    <div className="flex justify-between items-center bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs">
                       <div>
                         <span className="font-bold text-white text-sm">{currentFund.name}</span>
                         <span className="text-slate-400 ml-2">(중도환매 수수료: {currentFund.penalty_rate}%)</span>
@@ -1449,13 +1460,15 @@ export default function AdminPanel({
                         if (loadData) await loadData();
                         if (showAlert) showAlert(`📈 [${currentFund.name}] 지수가 [${nextIdx}p]로 업데이트되었습니다!`);
                       }}
-                      className="w-full bg-indigo-600 hover:bg-indigo-500 py-2.5 rounded-xl font-bold text-xs shadow-lg transition"
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 py-2.5 rounded-xl font-bold text-xs shadow-lg transition"
                     >
                       지표 반영 및 지수 갱신
                     </button>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500 py-4 text-center">개설된 펀드가 없습니다. 상단에서 새 펀드를 개설하세요.</p>
+                  <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-xs text-slate-500">
+                    현재 개설된 펀드가 없습니다. 상단에서 첫 번째 펀드를 개설해보세요!
+                  </div>
                 )}
               </div>
 
@@ -1490,7 +1503,7 @@ export default function AdminPanel({
                         if (loadData) await loadData();
                         if (showAlert) showAlert(`🚀 ${rows.length / 2}명의 대원이 [${currentFund.name}]에 자동 가입되었습니다!`);
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-500 px-5 rounded-xl font-bold text-xs transition"
+                      className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 px-5 rounded-xl font-bold text-xs transition"
                     >
                       일괄 가입 실행
                     </button>
