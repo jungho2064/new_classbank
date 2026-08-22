@@ -57,10 +57,23 @@ export default function App() {
 
   const [selectedQr, setSelectedQr] = useState<any>(null);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [alertType, setAlertType] = useState<'info' | 'success' | 'warning' | 'error'>('info');
 
   const showAlert = (msg: string) => {
     setAlertMsg(msg);
-    setTimeout(() => setAlertMsg(null), 3500);
+    if (msg.includes('❌') || msg.includes('불가') || msg.includes('부족') || msg.includes('실패')) {
+      setAlertType('error');
+    } else if (msg.includes('⚠️') || msg.includes('경고') || msg.includes('도래')) {
+      setAlertType('warning');
+    } else if (msg.includes('✅') || msg.includes('완료') || msg.includes('성공') || msg.includes('입금')) {
+      setAlertType('success');
+    } else {
+      setAlertType('info');
+    }
+
+    setTimeout(() => {
+      setAlertMsg(null);
+    }, 3000);
   };
 
   const loadData = async () => {
@@ -362,14 +375,22 @@ export default function App() {
           </div>
         )}
 
-        {/* 팝업 모달 뒤에 배치하여 블러 암막 위로 선명하게 표시 */}
+        {/* 💡 로그인 화면 최상단 반응형 팝업 (Toast UI) */}
         {alertMsg && (
-          <div 
-            style={{ zIndex: 99999 }} 
-            className="fixed top-8 left-0 right-0 max-w-xs mx-auto pointer-events-none px-4"
-          >
-            <div className="bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl border border-indigo-400">
-              {alertMsg}
+          <div style={{ zIndex: 99999 }} className="fixed top-5 left-1/2 -translate-x-1/2 max-w-md w-[90%] sm:w-auto transition-all">
+            <div className={`px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center justify-between gap-3 text-xs font-bold ${
+              alertType === 'error' 
+                ? 'bg-rose-950/90 border-rose-500/80 text-rose-200 shadow-rose-950/50' 
+                : alertType === 'warning'
+                ? 'bg-amber-950/90 border-amber-500/80 text-amber-200 shadow-amber-950/50'
+                : alertType === 'success'
+                ? 'bg-emerald-950/90 border-emerald-500/80 text-emerald-200 shadow-emerald-950/50'
+                : 'bg-indigo-950/90 border-indigo-500/80 text-indigo-200 shadow-indigo-950/50'
+            }`}>
+              <span>{alertMsg}</span>
+              <button type="button" onClick={() => setAlertMsg(null)} className="text-slate-400 hover:text-white ml-2 text-sm font-bold">
+                ✕
+              </button>
             </div>
           </div>
         )}
@@ -384,9 +405,23 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto bg-slate-950 min-h-screen shadow-2xl pb-28 text-white relative">
+      {/* 💡 학생 메인 화면 최상단 반응형 팝업 (Toast UI) */}
       {alertMsg && (
-        <div className="fixed top-4 left-0 right-0 max-w-xs mx-auto z-9999 bg-indigo-600 text-white py-3 px-4 rounded-2xl text-xs font-bold text-center animate-bounce shadow-2xl">
-          {alertMsg}
+        <div style={{ zIndex: 99999 }} className="fixed top-5 left-1/2 -translate-x-1/2 max-w-md w-[90%] sm:w-auto transition-all">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center justify-between gap-3 text-xs font-bold ${
+            alertType === 'error' 
+              ? 'bg-rose-950/90 border-rose-500/80 text-rose-200 shadow-rose-950/50' 
+              : alertType === 'warning'
+              ? 'bg-amber-950/90 border-amber-500/80 text-amber-200 shadow-amber-950/50'
+              : alertType === 'success'
+              ? 'bg-emerald-950/90 border-emerald-500/80 text-emerald-200 shadow-emerald-950/50'
+              : 'bg-indigo-950/90 border-indigo-500/80 text-indigo-200 shadow-indigo-950/50'
+          }`}>
+            <span>{alertMsg}</span>
+            <button type="button" onClick={() => setAlertMsg(null)} className="text-slate-400 hover:text-white ml-2 text-sm font-bold">
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
