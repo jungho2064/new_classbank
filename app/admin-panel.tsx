@@ -23,7 +23,9 @@ export default function AdminPanel({
   const safeTrans = Array.isArray(transactions) ? transactions : [];
   const safeSeats = Array.isArray(seats) ? seats : [];
 
-  const [adminTab, setAdminTab] = useState<'pending' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'qr' | 'funds' | 'audit' | 'system'>('pending');
+  const [adminTab, setAdminTab] = useState<'pending' | 'members' | 'reward' | 'salary' | 'loans' | 'estate' | 'deposits' | 'store' | 'qr' | 'funds' | 'audit' | 'system'>('pending');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberSort, setMemberSort] = useState<'netWorth' | 'cash' | 'name'>('netWorth');
   const [auditFilter, setAuditFilter] = useState<'student' | 'treasury' | 'all'>('student');
 
   // 상/벌금
@@ -435,6 +437,7 @@ export default function AdminPanel({
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
           {[
             { id: 'pending', label: '🔔 승인대기' },
+            { id: 'members', label: '👥 대원현황' }, // 👈 추가
             { id: 'reward', label: '🏆 상/벌금' },
             { id: 'salary', label: '💸 주급정산' },
             { id: 'loans', label: '🏦 대출/독촉' },
@@ -479,6 +482,150 @@ export default function AdminPanel({
             </div>
           </div>
         )}
+        {/* 1-2. 대원 전체 자산 & 직업 모니터링 대시보드 */}
+        {adminTab === 'members' && (() => {
+          const currentFundIdx = Number(fundData?.current_index || 1000);
+
+          // 학생별 실시간 자산 집계
+          const studentStats = safeUsers
+            .filter((u: any) => u && u.status === 'Approved')
+            .map((u: any) => {
+              const uTrans = safeTrans.filter((t: any) => t && t.name === u.name && t.status !== 'System' && t.status !== 'Rejected');
+              
+              // 1. 현금 잔액 (예금 제외 실 잔여금)
+              const cash = uTrans.reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
+              
+              // 2. 예금 잔액
+              const deposit = uTrans
+                .filter((t: any) => t.status === 'Deposit_Active')
+                .reduce((a: any, c: any) => a + Math.abs(Number(c.amount || 0)), 0);
+
+              // 3. 펀드 평가액 계산
+              const fundTrans = uTrans.filter((t: any) => t.status?.startsWith('Fund_'));
+              let fundEst = 0;
+              fundTrans.forEach((t: any) => {
+                const parts = (t.note || '').split('|');
+                const baseIdx = parseFloat(parts[1]) || 1000;
+                const buyAmt = Math.abs(Number(t.amount || 0));
+                fundEst += Math.floor(buyAmt * (currentFundIdx / baseIdx));
+              });
+
+              // 4. 대출 잔액
+              const loan = Number(u.loan_balance || 0);
+
+              // 5. 순자산 (현금 + 예금 + 펀드 - 대출)
+              const netWorth = cash + deposit + fundEst - loan;
+
+              return {
+                ...u,
+                cash,
+                deposit,
+                fundEst,
+                loan,
+                netWorth
+              };
+            });
+
+          // 필터 및 정렬
+          const filtered = studentStats
+            .filter((s: any) => s.name.includes(memberSearch.trim()))
+            .sort((a: any, b: any) => {
+              if (memberSort === 'netWorth') return b.netWorth - a.netWorth;
+              if (memberSort === 'cash') return b.cash - a.cash;
+              return a.name.localeCompare(b.name);
+            });
+
+          const totalNetWorth = studentStats.reduce((a: any, c: any) => a + c.netWorth, 0);
+          const avgNetWorth = studentStats.length > 0 ? Math.floor(totalNetWorth / studentStats.length) : 0;
+
+          return (
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                <div>
+                  <h3 className="font-bold text-sm text-indigo-400">👥 전 대원 프로필 및 자산 현황판</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">전체 {studentStats.length}명 대원의 현금, 예금, 펀드, 대출 및 순자산 현황입니다.</p>
+                </div>
+                <div className="flex gap-3 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                  <span>총 순자산: <b className="text-emerald-400">{totalNetWorth.toLocaleString()}안</b></span>
+                  <span className="text-slate-600">|</span>
+                  <span>1인 평균: <b className="text-indigo-300">{avgNetWorth.toLocaleString()}안</b></span>
+                </div>
+              </div>
+
+              {/* 검색 및 정렬 바 */}
+              <div className="flex gap-2 text-xs">
+                <input 
+                  type="text" 
+                  placeholder="대원 이름 검색..." 
+                  value={memberSearch} 
+                  onChange={e => setMemberSearch(e.target.value)} 
+                  className="flex-1 bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-white outline-none focus:border-indigo-500"
+                />
+                <select 
+                  value={memberSort} 
+                  onChange={e => setMemberSort(e.target.value as any)} 
+                  className="bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-slate-300 outline-none focus:border-indigo-500"
+                >
+                  <option value="netWorth">순자산 많은 순</option>
+                  <option value="cash">보유 현금 많은 순</option>
+                  <option value="name">이름 가나다순</option>
+                </select>
+              </div>
+
+              {/* 대원 자산 표 */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                <div className="max-h-[480px] overflow-y-auto">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 sticky top-0 z-10">
+                      <tr>
+                        <th className="p-2.5 pl-3">대원명</th>
+                        <th className="p-2.5">직무 (본직+알바)</th>
+                        <th className="p-2.5 text-right">보유 현금</th>
+                        <th className="p-2.5 text-right">예금</th>
+                        <th className="p-2.5 text-right">펀드평가</th>
+                        <th className="p-2.5 text-right">대출금</th>
+                        <th className="p-2.5 pr-3 text-right">순자산</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filtered.map((s: any, idx: number) => (
+                        <tr key={s.id} className="hover:bg-slate-900/40 transition">
+                          <td className="p-2.5 pl-3 font-bold text-white whitespace-nowrap">
+                            <span className="text-[10px] text-slate-500 mr-1.5">{idx + 1}.</span>
+                            {s.name}
+                          </td>
+                          <td className="p-2.5 text-slate-300 whitespace-nowrap">
+                            <span className="text-indigo-300 font-bold">{s.job || '우주 시민'}</span>
+                            {s.part_time_job && (
+                              <span className="text-emerald-400 ml-1 text-[10px] bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                                +{s.part_time_job}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right font-bold text-slate-200 whitespace-nowrap">
+                            {s.cash.toLocaleString()}안
+                          </td>
+                          <td className="p-2.5 text-right text-indigo-300 whitespace-nowrap">
+                            {s.deposit > 0 ? `${s.deposit.toLocaleString()}안` : '-'}
+                          </td>
+                          <td className="p-2.5 text-right text-purple-300 whitespace-nowrap">
+                            {s.fundEst > 0 ? `${s.fundEst.toLocaleString()}안` : '-'}
+                          </td>
+                          <td className="p-2.5 text-right text-rose-400 whitespace-nowrap">
+                            {s.loan > 0 ? `-${s.loan.toLocaleString()}안` : '-'}
+                          </td>
+                          <td className="p-2.5 pr-3 text-right font-bold text-emerald-400 text-xs whitespace-nowrap">
+                            {s.netWorth.toLocaleString()}안
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 2. 상/벌금 및 직접 수동 입출금 */}
         {adminTab === 'reward' && (
