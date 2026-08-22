@@ -427,16 +427,48 @@ export default function App() {
         </div>
       )}
 
+      {/* 💡 학생 메인 상단 헤더 (배정 좌석 & 낙찰 임대료 뱃지 연동) */}
       <header className="bg-gradient-to-b from-indigo-700 to-indigo-900 p-6 rounded-b-[2rem] shadow-xl">
         <div className="flex justify-between items-center mb-3">
           <span className="font-black text-xs text-indigo-200">SPACE CLASS BANK</span>
-          <button onClick={handleLogout} className="bg-black/30 p-1.5 rounded-full text-xs"><LogOut size={14}/></button>
+          <button onClick={handleLogout} className="bg-black/30 p-1.5 rounded-full text-xs hover:bg-black/50 transition">
+            <LogOut size={14}/>
+          </button>
         </div>
+
         <p className="text-xs text-indigo-200">{currentUser?.name} ({currentUser?.job})</p>
-        <div className="text-4xl font-black text-yellow-300 mt-1">{myBalance.toLocaleString()} <span className="text-lg text-yellow-400">안</span></div>
-        <div className="flex gap-2 pt-2">
-          <span className="bg-yellow-400/20 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-yellow-400/30">{myBalance >= 1000 ? '👑 은하 대부호' : '👨‍🚀 우주 시민'}</span>
-          {myDepositBalance > 0 && <span className="bg-blue-400/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-md">🏦 예금: {myDepositBalance}안</span>}
+        <div className="text-4xl font-black text-yellow-300 mt-1">
+          {myBalance.toLocaleString()} <span className="text-lg text-yellow-400">안</span>
+        </div>
+
+        {/* 뱃지 영역: 신분 / 예금 / 내 좌석 & 낙찰가 */}
+        <div className="flex flex-wrap gap-1.5 pt-2">
+          <span className="bg-yellow-400/20 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-yellow-400/30">
+            {myBalance >= 1000 ? '👑 은하 대부호' : '👨‍🚀 우주 시민'}
+          </span>
+
+          {myDepositBalance > 0 && (
+            <span className="bg-blue-400/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-blue-400/30">
+              🏦 예금: {myDepositBalance.toLocaleString()}안
+            </span>
+          )}
+
+          {/* 🪑 본인 좌석 번호 및 낙찰가(주간 임대료) 뱃지 */}
+          {(() => {
+            const mySeat = seats.find((s: any) => s && s.owner === currentUser?.name);
+            if (mySeat) {
+              return (
+                <span className="bg-emerald-400/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-400/30 flex items-center gap-1">
+                  🪑 좌석: {mySeat.seat}번 (주 {mySeat.rent || mySeat.floor_price || 30}안)
+                </span>
+              );
+            }
+            return (
+              <span className="bg-slate-800 text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-700">
+                🪑 좌석: 미배정 (공실)
+              </span>
+            );
+          })()}
         </div>
       </header>
 
