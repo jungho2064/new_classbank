@@ -451,7 +451,7 @@ await supabase.from('users').update({
           </div>
         )}
 
-        {/* 3. 주급 정산 및 직업/봉급 관리 */}
+        {/* 3. 주급 정산 및 직업/봉급 관리 (드롭다운 자동 입력 연동) */}
         {adminTab === 'salary' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
@@ -460,6 +460,10 @@ await supabase.from('users').update({
                 대상: <b className="text-white">{safeUsers.filter((u: any) => u && u.status === 'Approved').length}명</b>
               </span>
             </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              직업을 선택하면 약정 기본급이 자동으로 채워지며, 세율({taxRate}%)과 유지비({maintRate}%)를 공제하고 대출 상환액을 자동 회수한 뒤 실지급액을 계좌에 입금합니다.
+            </p>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
@@ -482,21 +486,21 @@ await supabase.from('users').update({
               </div>
             </div>
 
-            {/* 대원별 직업/봉급 수정 및 실시간 계산 표 */}
+            {/* 대원별 직업/봉급 드롭다운 및 실시간 정산 표 */}
             <div className="space-y-2 pt-2">
-              <p className="font-bold text-xs text-slate-300">📋 대원별 직업·기본급 설정 및 지급 예정액</p>
+              <p className="font-bold text-xs text-slate-300">📋 대원별 직업 배정 및 실지급액 미리보기</p>
               <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
-                <div className="max-h-72 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto">
                   <table className="w-full text-[11px] text-left">
                     <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 sticky top-0">
                       <tr>
                         <th className="p-2.5 pl-3">대원명</th>
-                        <th className="p-2.5">직업</th>
-                        <th className="p-2.5">기본급(안)</th>
+                        <th className="p-2.5">직업 선택</th>
+                        <th className="p-2.5">기본급</th>
                         <th className="p-2.5 text-center">공제</th>
                         <th className="p-2.5 text-center">상환</th>
                         <th className="p-2.5 text-right">실지급</th>
-                        <th className="p-2.5 pr-3 text-center">관리</th>
+                        <th className="p-2.5 pr-3 text-center">반영</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
@@ -508,41 +512,76 @@ await supabase.from('users').update({
                           const repay = Math.min(Number(u.weekly_repay || 0), Number(u.loan_balance || 0));
                           const net = base - tax - repay;
 
+                          // 직업 프리셋 목록
+                          const jobPresets: { [key: string]: number } = {
+                            '봉사위원': 180,
+                            '분리배출': 160,
+                            '우유 관리': 150,
+                            '교실 바닥 쓸기': 150,
+                            '특별구역 청소': 140,
+                            '복도 쓸기': 140,
+                            '창문관리 및 청소': 140,
+                            '에너지 관리 및 피아노 설치': 140,
+                            '책상 줄 맞추기': 130,
+                            '배달부': 130,
+                            '시간표 관리': 120,
+                            '우주 시민': 140
+                          };
+
                           return (
                             <tr key={u.id} className="hover:bg-slate-900/40">
                               <td className="p-2.5 pl-3 font-bold text-white whitespace-nowrap">{u.name}</td>
                               <td className="p-2">
-                                <input 
-                                  type="text" 
+                                <select 
                                   defaultValue={u.job || '우주 시민'}
                                   id={`job-${u.id}`}
-                                  className="w-20 bg-slate-900 border border-slate-700 px-1.5 py-1 rounded text-white text-[11px]"
-                                />
+                                  onChange={(e) => {
+                                    const sal = jobPresets[e.target.value];
+                                    if (sal !== undefined) {
+                                      const salInput = document.getElementById(`sal-${u.id}`) as HTMLInputElement;
+                                      if (salInput) salInput.value = String(sal);
+                                    }
+                                  }}
+                                  className="w-36 bg-slate-900 border border-slate-700 px-2 py-1.5 rounded-lg text-indigo-200 text-[11px] font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="봉사위원">봉사위원 (180안, 5명)</option>
+                                  <option value="분리배출">분리배출 (160안, 2명)</option>
+                                  <option value="우유 관리">우유 관리 (150안, 2명)</option>
+                                  <option value="교실 바닥 쓸기">교실 바닥 쓸기 (150안, 3명)</option>
+                                  <option value="특별구역 청소">특별구역 청소 (140안, 3명)</option>
+                                  <option value="복도 쓸기">복도 쓸기 (140안, 2명)</option>
+                                  <option value="창문관리 및 청소">창문관리 및 청소 (140안, 3명)</option>
+                                  <option value="에너지 관리 및 피아노 설치">에너지 관리 및 피아노 설치 (140안, 1명)</option>
+                                  <option value="책상 줄 맞추기">책상 줄 맞추기 (130안, 3명)</option>
+                                  <option value="배달부">배달부 (130안, 1명)</option>
+                                  <option value="시간표 관리">시간표 관리 (120안, 1명)</option>
+                                  <option value="우주 시민">기본 시민 (140안)</option>
+                                </select>
                               </td>
                               <td className="p-2">
                                 <input 
                                   type="number" 
                                   defaultValue={base}
                                   id={`sal-${u.id}`}
-                                  className="w-16 bg-slate-900 border border-slate-700 px-1.5 py-1 rounded text-yellow-400 font-bold text-[11px]"
+                                  className="w-16 bg-slate-900 border border-slate-700 px-1.5 py-1.5 rounded-lg text-yellow-400 font-bold text-[11px] outline-none focus:border-indigo-500 text-center"
                                 />
                               </td>
-                              <td className="p-2.5 text-center text-rose-400 whitespace-nowrap">-{tax}</td>
-                              <td className="p-2.5 text-center text-amber-400 whitespace-nowrap">{repay > 0 ? `-${repay}` : '0'}</td>
-                              <td className="p-2.5 text-right font-bold text-emerald-400 whitespace-nowrap">+{net}</td>
+                              <td className="p-2.5 text-center text-rose-400 whitespace-nowrap">-{tax}안</td>
+                              <td className="p-2.5 text-center text-amber-400 whitespace-nowrap">{repay > 0 ? `-${repay}안` : '0안'}</td>
+                              <td className="p-2.5 text-right font-bold text-emerald-400 whitespace-nowrap">+{net}안</td>
                               <td className="p-2 pr-3 text-center">
                                 <button 
                                   onClick={async () => {
-                                    const jobInput = (document.getElementById(`job-${u.id}`) as HTMLInputElement)?.value;
+                                    const jobInput = (document.getElementById(`job-${u.id}`) as HTMLSelectElement)?.value;
                                     const salInput = (document.getElementById(`sal-${u.id}`) as HTMLInputElement)?.value;
                                     await supabase.from('users').update({ 
                                       job: jobInput, 
                                       salary: parseInt(salInput || '140') 
                                     }).eq('id', u.id);
                                     if (loadData) await loadData();
-                                    if (showAlert) showAlert(`✅ ${u.name} 대원의 정보가 저장되었습니다.`);
+                                    if (showAlert) showAlert(`✅ ${u.name} 대원: [${jobInput} / ${salInput}안] 저장 완료`);
                                   }}
-                                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] font-bold"
+                                  className="bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-200 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition"
                                 >
                                   저장
                                 </button>
@@ -564,7 +603,6 @@ await supabase.from('users').update({
             </button>
           </div>
         )}
-
         {/* 4. 대출/독촉 */}
         {adminTab === 'loans' && (
           <div className="space-y-4">
