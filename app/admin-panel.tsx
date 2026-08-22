@@ -28,7 +28,7 @@ export default function AdminPanel({
 
   // 상/벌금
   const [rewardTarget, setRewardTarget] = useState('');
-  const [rewardType, setRewardType] = useState<'상금(+)' | '벌금(-)'>('상금(+)');
+  const [rewardType, setRewardType] = useState<'상금(+)' | '벌금(-)' | '기타 입금(+)' | '기타 출금(-)'>('상금(+)');
   const [rewardAmt, setRewardAmt] = useState('');
   const [rewardReason, setRewardReason] = useState('');
 
@@ -116,7 +116,7 @@ export default function AdminPanel({
     if (showAlert) showAlert(`요청이 [${status === 'Success' ? '승인' : '거절 (환불 완료)'}] 처리되었습니다.`);
   };
 
-  // 상/벌금 실행 (실시간 DB 잔액 검증 및 자동 대출 전환)
+  // 수동 입출금 실행 (상금/벌금 및 직접 입력 사유 지원)
   const handleRewardPenalty = async () => {
     if (!supabase) return;
     const amt = parseInt(rewardAmt);
@@ -126,8 +126,10 @@ export default function AdminPanel({
     }
 
     const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const isDeduction = rewardType === '벌금(-)' || rewardType === '기타 출금(-)';
 
-    if (rewardType === '벌금(-)') {
+    // 1. 차감(-) 로직 및 잔액 부족 시 대출 강제 전환
+    if (isDeduction) {
       const { data: userTrans } = await supabase
         .from('transactions')
         .select('amount')
@@ -135,20 +137,20 @@ export default function AdminPanel({
         .neq('status', 'System')
         .neq('status', 'Deposit_Active');
 
-      const targetBalance = (userTrans || []).reduce((a, c) => a + Number(c.amount || 0), 0);
+      const targetBalance = (userTrans || []).reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
 
       if (targetBalance < amt) {
         const shortage = amt - targetBalance;
-        const { data: targetUser } = await supabase.from('users').select('loan_balance').eq('name', rewardTarget).single();
+        const { data: targetUser } = await supabase.from('users').select('loan_balance, weekly_repay').eq('name', rewardTarget).single();
 
         if (targetBalance > 0) {
           await supabase.from('transactions').insert([
-            { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: -targetBalance, note: `${rewardReason || '벌금'} (가진 돈 전액 징수)`, status: 'Success' },
-            { date: nowStr, name: '국고(중앙은행)', type: '벌금 수입', amount: targetBalance, note: `${rewardTarget} 벌금`, status: 'Success' }
+            { date: nowStr, name: rewardTarget, type: rewardType, amount: -targetBalance, note: `${rewardReason || rewardType} (잔액 전액 징수)`, status: 'Success' },
+            { date: nowStr, name: '국고(중앙은행)', type: rewardType === '벌금(-)' ? '벌금 수입' : '국고 수입', amount: targetBalance, note: `${rewardTarget} ${rewardType}`, status: 'Success' }
           ]);
         } else {
           await supabase.from('transactions').insert([
-            { date: nowStr, name: rewardTarget, type: '벌금(-)', amount: 0, note: `${rewardReason || '벌금'} (잔액 부족으로 전액 대출 전환)`, status: 'System' }
+            { date: nowStr, name: rewardTarget, type: rewardType, amount: 0, note: `${rewardReason || rewardType} (잔액 부족으로 전액 대출 전환)`, status: 'System' }
           ]);
         }
 
@@ -169,16 +171,34 @@ export default function AdminPanel({
       }
     }
 
-    const isReward = rewardType === '상금(+)';
-    const val = isReward ? amt : -amt;
+    // 2. 정상 입출금 반영
+    const val = isDeduction ? -amt : amt;
+    const treasuryType = isDeduction 
+      ? (rewardType === '벌금(-)' ? '벌금 수입' : '국고 수입') 
+      : (rewardType === '상금(+)' ? '정부 지출' : '직접 지급 지출');
 
     await supabase.from('transactions').insert([
-      { date: nowStr, name: rewardTarget, type: rewardType, amount: val, note: rewardReason || '선생님 재량', status: 'Success' },
-      { date: nowStr, name: '국고(중앙은행)', type: isReward ? '정부 지출' : '벌금 수입', amount: -val, note: `${rewardTarget} ${rewardType}`, status: 'Success' }
+      { 
+        date: nowStr, 
+        name: rewardTarget, 
+        type: rewardType, 
+        amount: val, 
+        note: rewardReason || (isDeduction ? '직접 차감' : '직접 지급'), 
+        status: 'Success' 
+      },
+      { 
+        date: nowStr, 
+        name: '국고(중앙은행)', 
+        type: treasuryType, 
+        amount: -val, 
+        note: `${rewardTarget} ${rewardType} (${rewardReason || '수동 처리'})`, 
+        status: 'Success' 
+      }
     ]);
+
     setRewardAmt(''); setRewardReason('');
     if (loadData) await loadData();
-    if (showAlert) showAlert(`🏆 ${rewardTarget} 대원에게 ${rewardType} ${amt}안 반영 완료!`);
+    if (showAlert) showAlert(`✅ ${rewardTarget} 대원에게 [${rewardType} ${amt}안] 처리가 완료되었습니다.`);
   };
 
   // 주급 일괄 지급 (본봉 + 단기 알바 수당 합산 지급)
@@ -460,23 +480,60 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 2. 상/벌금 */}
+        {/* 2. 상/벌금 및 직접 수동 입출금 */}
         {adminTab === 'reward' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-bold text-sm text-indigo-400">🏆 개별 상/벌금 지급 및 징수 (국고 연동)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
-              <select value={rewardTarget} onChange={e => setRewardTarget(e.target.value)} className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold">
-                <option value="">대상 대원 선택</option>
-                {safeUsers.filter((u: any) => u && u.status === 'Approved').map((u: any) => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
-              <select value={rewardType} onChange={e => setRewardType(e.target.value as any)} className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold">
-                <option value="상금(+)">상금 (+)</option>
-                <option value="벌금(-)">벌금 (-)</option>
-              </select>
-              <input type="number" placeholder="금액 (안)" value={rewardAmt} onChange={e => setRewardAmt(e.target.value)} className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold" />
-              <input type="text" placeholder="사유 (예: 발표 우수)" value={rewardReason} onChange={e => setRewardReason(e.target.value)} className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold" />
+            <div>
+              <h3 className="font-bold text-sm text-indigo-400">🏆 수동 입출금 관리 (상/벌금 및 직접 입력 사유)</h3>
+              <p className="text-xs text-slate-400 mt-1">상금, 벌금 외에도 이벤트 보상, 청소 보너스 등 원하는 사유를 적어 즉시 입출금할 수 있습니다.</p>
             </div>
-            <button onClick={handleRewardPenalty} className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs shadow-lg">상/벌금 장부 반영 실행</button>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <select 
+                value={rewardTarget} 
+                onChange={e => setRewardTarget(e.target.value)} 
+                className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white outline-none focus:border-indigo-500"
+              >
+                <option value="">대상 대원 선택</option>
+                {safeUsers.filter((u: any) => u && u.status === 'Approved').map((u: any) => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+              </select>
+
+              <select 
+                value={rewardType} 
+                onChange={e => setRewardType(e.target.value as any)} 
+                className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white outline-none focus:border-indigo-500"
+              >
+                <option value="상금(+)">🏆 상금 (+)</option>
+                <option value="기타 입금(+)">➕ 직접 입금 (+)</option>
+                <option value="벌금(-)">🚨 벌금 (-)</option>
+                <option value="기타 출금(-)">➖ 직접 차감 (-)</option>
+              </select>
+
+              <input 
+                type="number" 
+                placeholder="금액 (안)" 
+                value={rewardAmt} 
+                onChange={e => setRewardAmt(e.target.value)} 
+                className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white outline-none focus:border-indigo-500" 
+              />
+
+              <input 
+                type="text" 
+                placeholder="지급/차감 사유 (예: 퀴즈 우승, 재료비)" 
+                value={rewardReason} 
+                onChange={e => setRewardReason(e.target.value)} 
+                className="bg-slate-950 border border-slate-800 p-3 rounded-xl font-bold text-white outline-none focus:border-indigo-500" 
+              />
+            </div>
+
+            <button 
+              onClick={handleRewardPenalty} 
+              className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-xs shadow-lg transition"
+            >
+              장부 반영 실행
+            </button>
           </div>
         )}
 
