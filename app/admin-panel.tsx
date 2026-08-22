@@ -17,6 +17,8 @@ export default function AdminPanel({
   setDepositOpen, 
   loadData, 
   showAlert, 
+  alertMsg,       // 👈 추가
+  alertType,      // 👈 추가
   onLogout 
 }: any) {
   const safeUsers = Array.isArray(userList) ? userList : [];
@@ -485,12 +487,24 @@ export default function AdminPanel({
   const totalMoneySupply = safeTrans.filter((t: any) => t && t.name !== '국고(중앙은행)' && t.status !== 'Rejected' && t.status !== 'Deposit_Active').reduce((a: any, c: any) => a + Number(c.amount || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-24">
-      {showAlert && (
-        <div className="fixed top-4 left-0 right-0 max-w-sm mx-auto px-4 z-[9999] pointer-events-none">
-          {/* 부모 App에서 넘겨받은 alertMsg 표시 */}
+    <div className="min-h-screen bg-slate-950 text-white pb-24 relative">
+      {/* 💡 최상단 반응형 토스트 팝업 */}
+      {alertMsg && (
+        <div style={{ zIndex: 99999 }} className="fixed top-5 left-1/2 -translate-x-1/2 max-w-md w-[90%] sm:w-auto transition-all animate-bounce-short pointer-events-auto">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center justify-between gap-3 text-xs font-bold ${
+            alertType === 'error' 
+              ? 'bg-rose-950/90 border-rose-500/80 text-rose-200 shadow-rose-950/50' 
+              : alertType === 'warning'
+              ? 'bg-amber-950/90 border-amber-500/80 text-amber-200 shadow-amber-950/50'
+              : alertType === 'success'
+              ? 'bg-emerald-950/90 border-emerald-500/80 text-emerald-200 shadow-emerald-950/50'
+              : 'bg-indigo-950/90 border-indigo-500/80 text-indigo-200 shadow-indigo-950/50'
+          }`}>
+            <span>{alertMsg}</span>
+          </div>
         </div>
       )}
+
       <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 flex justify-between items-center max-w-5xl mx-auto">
         <div className="flex items-center gap-2">
           <span className="text-2xl">👨‍🏫</span>
@@ -1024,7 +1038,10 @@ export default function AdminPanel({
                 const isOccupied = !!s.owner;
 
                 return (
-                  <div key={seatNo} className={`p-3.5 rounded-xl border transition ${isOccupied ? 'bg-indigo-950/40 border-indigo-500/50' : 'bg-slate-950 border-slate-800'}`}>
+                  <div 
+                    key={`${seatNo}-${s.floor_price}-${s.rent}-${s.owner}`} 
+                    className={`p-3.5 rounded-xl border transition ${isOccupied ? 'bg-indigo-950/40 border-indigo-500/50' : 'bg-slate-950 border-slate-800'}`}
+                  >
                     <div className="flex justify-between items-center mb-2">
                       <span className="font-bold text-xs text-white">🪑 {seatNo}번 좌석</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOccupied ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-400'}`}>
@@ -1054,7 +1071,7 @@ export default function AdminPanel({
                             type="number" 
                             id={`floor-${seatNo}`}
                             defaultValue={s.floor_price || 30}
-                            className="w-full bg-slate-900 border border-slate-700 p-1 rounded-lg text-yellow-400 font-bold text-center text-xs outline-none"
+                            className="w-full bg-slate-900 border border-slate-700 p-1 rounded-lg text-yellow-400 font-bold text-center text-xs outline-none focus:border-indigo-500"
                           />
                         </div>
                         <div>
@@ -1063,14 +1080,14 @@ export default function AdminPanel({
                             type="number" 
                             id={`rent-${seatNo}`}
                             defaultValue={s.rent || s.floor_price || 30}
-                            className="w-full bg-slate-900 border border-slate-700 p-1 rounded-lg text-emerald-400 font-bold text-center text-xs outline-none"
+                            className="w-full bg-slate-900 border border-slate-700 p-1 rounded-lg text-emerald-400 font-bold text-center text-xs outline-none focus:border-indigo-500"
                           />
                         </div>
                       </div>
 
                       <button 
                         onClick={() => handleUpdateSeat(seatNo)}
-                        className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-1.5 rounded-lg font-bold text-[11px] transition"
+                        className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-1.5 rounded-lg font-bold text-[11px] transition active:scale-95"
                       >
                         저장
                       </button>
