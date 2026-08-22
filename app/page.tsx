@@ -117,7 +117,7 @@ export default function App() {
       const { data: estate } = await supabase.from('real_estate').select('*').order('seat', { ascending: true });
       if (estate) setSeats(estate);
 
-      const { data: funds } = await supabase.from('funds').select('*').limit(1).single();
+      const { data: funds } = await supabase.from('funds').select('*').order('id', { ascending: true });
       if (funds) setFundData(funds);
 
       const { data: configs } = await supabase.from('system_config').select('*');
