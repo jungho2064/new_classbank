@@ -304,9 +304,9 @@ export default function App() {
         item_name: item.name, 
         serial, 
         status: 'Unused', 
-        total_uses: uses,
-        remaining_uses: uses,
-        expire_at: expireAtStr 
+        total_uses: Number(item.total_uses || 1),
+        remaining_uses: Number(item.total_uses || 1),
+        expire_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 30일 뒤 만료
       }]);
 
       await supabase!.from('shop_items').update({ stock: item.stock - 1 }).eq('item_id', item.item_id);
