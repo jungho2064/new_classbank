@@ -37,8 +37,10 @@ export default function App() {
   const [isFrozen, setIsFrozen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(true);
   const [notice, setNotice] = useState('');
+ 
+  const [bankerName, setBankerName] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'settings' | 'store' | 'bag' | 'fund'>('wallet');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'transfer' | 'withdraw' | 'deposit' | 'loan' | 'payslip' | 'settings' | 'store' | 'bag' | 'fund'| 'banker'>('wallet');
 
   const [transferTarget, setTransferTarget] = useState('');
   const [transferAmt, setTransferAmt] = useState('');
@@ -126,6 +128,7 @@ export default function App() {
         setIsFrozen(String(vMap.is_vacation || '').toUpperCase() === 'TRUE');
         setDepositOpen(String(vMap.deposit_open || 'TRUE').toUpperCase() === 'TRUE');
         setNotice(vMap.maintenance_notice || '');
+        setBankerName(vMap.banker_name || ''); // 👈 은행원 이름 저장
       }
     } catch (e) {
       console.error(e);
@@ -537,6 +540,27 @@ export default function App() {
               <button onClick={() => setActiveTab('settings')} disabled={isProcessing} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 active:scale-95 transition disabled:opacity-50"><Settings size={18} className="text-slate-400"/> 비번관리</button>
               <button onClick={() => setActiveTab('fund')} disabled={isProcessing} className="bg-slate-900 border border-slate-800 p-3 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 active:scale-95 transition disabled:opacity-50"><TrendingUp size={18} className="text-purple-400"/> 펀드투자</button>
             </div>
+            {/* 👨‍💼 은행원으로 지정된 학생에게만 나타나는 특수 배너 */}
+            {currentUser?.name === bankerName && (
+              <button
+                onClick={() => setActiveTab('banker')}
+                disabled={isProcessing}
+                className="w-full bg-gradient-to-r from-amber-600/30 to-amber-900/40 border border-amber-500/50 p-3 rounded-2xl flex items-center justify-between shadow-lg active:scale-95 transition"
+              >
+                <div className="flex items-center gap-2.5 text-left">
+                  <div className="bg-amber-500 text-slate-950 p-2 rounded-xl font-black text-sm">🏧</div>
+                  <div>
+                    <p className="font-bold text-xs text-amber-300">학급 은행원 관제 데스크</p>
+                    <p className="text-[10px] text-amber-200/70">
+                      대기 중인 출금 신청: {transactions.filter(t => t.status === 'Pending_W').length}건
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-amber-300 bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/40">
+                  열기 ➔
+                </span>
+              </button>
+            )}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
               <h3 className="font-bold text-xs text-slate-400">최근 입출금 내역</h3>
               {myTrans.slice(0, 5).map(t => (
@@ -894,6 +918,98 @@ export default function App() {
                     </div>
                   );
                 })
+              )}
+            </div>
+          );
+        })()}
+        {/* 👨‍💼 은행원 전용 출금 요청 처리 데스크 */}
+        {activeTab === 'banker' && currentUser?.name === bankerName && (() => {
+          const pendingWithdrawals = transactions.filter(t => t.status === 'Pending_W');
+
+          return (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-xs">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <h2 className="font-bold text-amber-400 text-sm flex items-center gap-1.5">
+                  <span>👨‍💼</span> 은행원 출금 관리 데스크
+                </h2>
+                <button onClick={() => setActiveTab('wallet')} disabled={isProcessing} className="text-slate-400 hover:text-white p-1">
+                  <ChevronLeft size={18}/>
+                </button>
+              </div>
+
+              {pendingWithdrawals.length === 0 ? (
+                <div className="bg-slate-950 p-8 rounded-xl border border-slate-800 text-center space-y-2">
+                  <p className="text-3xl">☕</p>
+                  <p className="text-sm font-bold text-emerald-400">대기 중인 출금 요청이 없습니다.</p>
+                  <p className="text-slate-500 text-[11px]">친구들이 현금 출금을 신청하면 여기에 실시간으로 표시됩니다.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="font-bold text-slate-300 flex justify-between items-center">
+                    <span>📋 출금 대기 명단</span>
+                    <span className="text-amber-400 font-normal">{pendingWithdrawals.length}건 대기 중</span>
+                  </p>
+
+                  {pendingWithdrawals.map(w => {
+                    const reqAmt = Math.abs(Number(w.amount || 0));
+
+                    return (
+                      <div key={w.id} className="bg-slate-950 border border-amber-500/30 p-3.5 rounded-xl space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-sm text-white">{w.name} 대원</span>
+                          <span className="text-[10px] text-slate-400">{w.date}</span>
+                        </div>
+
+                        <div className="bg-slate-900 p-2.5 rounded-lg flex justify-between items-center">
+                          <span className="text-slate-400">출금 요청액</span>
+                          <span className="text-base font-black text-yellow-300">{reqAmt.toLocaleString()} 안</span>
+                        </div>
+
+                        <div className="flex gap-2 pt-1">
+                          {/* 거절 버튼 */}
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`[${w.name}] 대원의 ${reqAmt}안 출금 요청을 거절하시겠습니까?`)) return;
+                              await runStudentTask(`[${w.name}] 출금 반려 처리 중...`, async () => {
+                                const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                                await supabase!.from('transactions').update({ status: 'Rejected' }).eq('id', w.id);
+                                await supabase!.from('transactions').insert([{
+                                  date: nowStr,
+                                  name: w.name,
+                                  type: '출금 반려',
+                                  amount: 0,
+                                  note: `출금 요청 반려됨 (은행원: ${currentUser.name})`,
+                                  status: 'System'
+                                }]);
+                                await loadData();
+                              });
+                              showAlert(`❌ [${w.name}] 대원의 출금을 거절(반려)했습니다.`);
+                            }}
+                            disabled={isProcessing}
+                            className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg font-bold text-xs active:scale-95 transition"
+                          >
+                            거절
+                          </button>
+
+                          {/* 승인 버튼 */}
+                          <button
+                            onClick={async () => {
+                              await runStudentTask(`[${w.name}] 출금 승인 처리 중...`, async () => {
+                                await supabase!.from('transactions').update({ status: 'Success' }).eq('id', w.id);
+                                await loadData();
+                              });
+                              showAlert(`✅ [${w.name}] 대원의 ${reqAmt}안 현금 출금을 승인했습니다!`);
+                            }}
+                            disabled={isProcessing}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg font-bold text-xs active:scale-95 transition shadow"
+                          >
+                            현금 지급 완료 (승인)
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           );

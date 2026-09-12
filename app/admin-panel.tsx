@@ -33,6 +33,19 @@ export default function AdminPanel({
   const [memberSearch, setMemberSearch] = useState('');
   const [memberSort, setMemberSort] = useState<'netWorth' | 'cash' | 'name'>('netWorth');
 
+  // 은행원 임명 상태
+  const [bankerName, setBankerName] = useState<string>('');
+
+  useEffect(() => {
+    // system_config에서 현재 설정된 은행원 이름 로드
+    const fetchBanker = async () => {
+      if (!supabase) return;
+      const { data } = await supabase.from('system_config').select('*').eq('key', 'banker_name').single();
+      if (data && data.value) setBankerName(data.value);
+    };
+    fetchBanker();
+  }, []);
+
   // 상/벌금 및 직접 수동 입출금
   const [rewardTarget, setRewardTarget] = useState('');
   const [rewardType, setRewardType] = useState<'상금(+)' | '벌금(-)' | '기타 입금(+)' | '기타 출금(-)'>('상금(+)');
@@ -1607,6 +1620,52 @@ export default function AdminPanel({
 
         {/* 11. 시스템 제어 */}
         {adminTab === 'system' && (
+          {/* 🏦 은행원(출금 관리자) 지정 구역 */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3 mb-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-sm text-indigo-400">🏦 학급 은행원(출금 전담 대원) 임명</h3>
+                  {bankerName && (
+                    <span className="bg-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
+                      현재 은행원: {bankerName} 대원
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  은행원으로 지정된 대원은 본인 탭에서 친구들의 현금 출금 사전 신청을 직접 승인하거나 거절할 수 있습니다.
+                </p>
+                <div className="flex gap-2">
+                  <select
+                    value={bankerName}
+                    onChange={(e) => setBankerName(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs font-bold text-white outline-none focus:border-indigo-500"
+                  >
+                    <option value="">-- 은행원 미지정 (선생님만 승인) --</option>
+                    {safeUsers.filter((u: any) => u.status === 'Approved').map((u: any) => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} ({u.job || '우주 시민'})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={async () => {
+                      // system_config 테이블에 banker_name 저장 (upsert)
+                      const { error } = await supabase.from('system_config').upsert(
+                        { key: 'banker_name', value: bankerName },
+                        { onConflict: 'key' }
+                      );
+                      if (!error) {
+                        if (showAlert) showAlert(`✅ 은행원이 '${bankerName || '미지정'}' 대원으로 설정되었습니다!`);
+                        if (loadData) await loadData();
+                      } else {
+                        if (showAlert) showAlert('❌ 은행원 설정 저장에 실패했습니다.');
+                      }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 px-4 rounded-xl font-bold text-xs transition"
+                  >
+                    임명 저장
+                  </button>
+                </div>
+              </div>
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
             <h3 className="font-bold text-sm text-indigo-400">⚙️ 학급 경제 특수 제어</h3>
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
