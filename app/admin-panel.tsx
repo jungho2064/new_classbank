@@ -1690,6 +1690,9 @@ export default function AdminPanel({
                 }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
               </div>
             </div>
-          </div>
-        )}
-  )     
+          </div> 
+        )}   
+      </main>
+    </div>
+  );  
+}
