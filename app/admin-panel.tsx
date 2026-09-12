@@ -469,23 +469,64 @@ export default function AdminPanel({
     if (showAlert) showAlert('🗑️ 상품이 삭제되었습니다.');
   };
 
-  // QR 검증
+  // QR/시리얼 검증 (다회용 차감 및 유효기간 만료 체크)
   const handleVerifySerial = async () => {
     if (!supabase || !serialInput.trim()) return;
-    const { data: inv } = await supabase.from('inventory').select('*').eq('serial', serialInput.trim().toUpperCase()).single();
-    if (!inv) {
+    const cleanSerial = serialInput.trim().toUpperCase();
+
+    const { data: inv, error } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('serial', cleanSerial)
+      .single();
+
+    if (error || !inv) {
       if (showAlert) showAlert('❌ 등록되지 않은 시리얼 번호입니다.');
       return;
     }
+
     if (inv.status === 'Used') {
-      if (showAlert) showAlert('⚠️ 이미 사용이 완료된 쿠폰입니다.');
+      if (showAlert) showAlert('⚠️ 이미 모든 횟수를 소진하여 사용 완료된 쿠폰입니다.');
       return;
     }
 
-    await supabase.from('inventory').update({ status: 'Used' }).eq('id', inv.id);
-    setSerialInput('');
-    if (loadData) await loadData();
-    if (showAlert) showAlert(`✅ [${inv.name}] 대원의 [${inv.item_name}] 사용 처리가 확정되었습니다!`);
+    // 1) 유효기간 만료 체크
+    if (inv.expire_at) {
+      const today = new Date().toISOString().split('T')[0];
+      if (inv.expire_at < today) {
+        if (showAlert) showAlert(`⛔ 유효기간 만료! (${inv.expire_at}까지 사용 가능했던 쿠폰입니다)`);
+        return;
+      }
+    }
+
+    // 2) 잔여 횟수 계산
+    const currentRem = inv.remaining_uses !== undefined && inv.remaining_uses !== null 
+      ? Number(inv.remaining_uses) 
+      : 1;
+    const total = inv.total_uses || 1;
+
+    if (currentRem <= 1) {
+      // 마지막 1회 사용 -> 완전 사용 완료 처리
+      await supabase
+        .from('inventory')
+        .update({ remaining_uses: 0, status: 'Used' })
+        .eq('id', inv.id);
+
+      setSerialInput('');
+      if (loadData) await loadData();
+      if (showAlert) showAlert(`🎉 [${inv.name}] 대원의 [${inv.item_name}] 마지막 1회가 차감되어 사용 완료되었습니다!`);
+    } else {
+      // 다회권 -> 1회 차감 유지
+      const nextRem = currentRem - 1;
+      await supabase
+        .from('inventory')
+        .update({ remaining_uses: nextRem })
+        .eq('id', inv.id);
+
+      setSerialInput('');
+      if (loadData) await loadData();
+      if (showAlert) showAlert(`✅ [${inv.name}] 대원의 [${inv.item_name}] 1회 사용 확인! (남은 횟수: ${nextRem}/${total}회)`);
+    }
   };
 
   // 펀드 업데이트 및 일괄 가입
@@ -1321,14 +1362,31 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 8. QR 검증 */}
+        {/* 9. QR검증 */}
         {adminTab === 'qr' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-bold text-sm text-indigo-400">🔍 학생 쿠폰 시리얼 코드 검증기</h3>
-            <p className="text-xs text-slate-400">학생이 가방에서 보여주는 시리얼 번호(SN-XXXXXX)를 입력해 사용을 확정합니다.</p>
+            <div>
+              <h3 className="font-bold text-sm text-indigo-400">🔍 학생 쿠폰 시리얼 코드 검증기</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                학생의 가방 쿠폰 시리얼 번호(SN-XXXXXX)를 입력해 사용을 승인합니다. 
+                다회권은 1회씩 차감되며 유효기간 초과 시 자동으로 사용이 거절됩니다.
+              </p>
+            </div>
             <div className="flex gap-2">
-              <input type="text" placeholder="SN-123456" value={serialInput} onChange={e => setSerialInput(e.target.value)} className="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono font-bold uppercase" />
-              <button onClick={handleVerifySerial} className="bg-emerald-600 px-5 rounded-xl font-bold text-xs">사용 확정</button>
+              <input 
+                type="text" 
+                placeholder="SN-123456" 
+                value={serialInput} 
+                onChange={e => setSerialInput(e.target.value)} 
+                onKeyDown={e => { if (e.key === 'Enter') handleVerifySerial(); }}
+                className="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono font-bold uppercase outline-none focus:border-indigo-500" 
+              />
+              <button 
+                onClick={handleVerifySerial} 
+                className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 px-5 rounded-xl font-bold text-xs transition"
+              >
+                1회 사용 승인
+              </button>
             </div>
           </div>
         )}
