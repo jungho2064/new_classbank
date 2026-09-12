@@ -113,11 +113,21 @@ export default function AdminPanel({
     loadFunds();
   }, [adminTab]);
 
-  // 상점 아이템 불러오기
+ // 상점 아이템 불러오기 (created_at 컬럼 누락 에러 방지 -> id 기준 내림차순 정렬)
   const loadShopItems = async () => {
     if (!supabase) return;
-    const { data } = await supabase.from('shop_items').select('*').order('created_at', { ascending: false });
-    setShopItemsList(data || []);
+    const { data, error } = await supabase
+      .from('shop_items')
+      .select('*')
+      .order('id', { ascending: false });
+    
+    if (error) {
+      // 혹시 id 정렬도 안 될 경우 기본 조회
+      const fallback = await supabase.from('shop_items').select('*');
+      setShopItemsList(fallback.data || []);
+    } else {
+      setShopItemsList(data || []);
+    }
   };
 
   useEffect(() => {
@@ -438,17 +448,48 @@ export default function AdminPanel({
     if (showAlert) showAlert('🛍️ 새 상품이 상점에 정상 등록되었습니다.');
   };
 
+  // 상품 정보 수정 저장
   const handleUpdateShopItem = async (item: any) => {
     if (!supabase) return;
-    const price = parseInt((document.getElementById(`price-${item.id}`) as HTMLInputElement)?.value || String(item.price));
-    const stock = parseInt((document.getElementById(`stock-${item.id}`) as HTMLInputElement)?.value || String(item.stock));
-    const name = (document.getElementById(`name-${item.id}`) as HTMLInputElement)?.value || item.name;
+    const nameInput = (document.getElementById(`name-${item.id}`) as HTMLInputElement)?.value;
+    const priceInput = (document.getElementById(`price-${item.id}`) as HTMLInputElement)?.value;
+    const stockInput = (document.getElementById(`stock-${item.id}`) as HTMLInputElement)?.value;
 
-    await supabase.from('shop_items').update({ price, stock, name }).eq('id', item.id);
-    setEditingItemId(null);
-    await loadShopItems();
-    if (loadData) await loadData();
-    if (showAlert) showAlert(`✅ [${name}] 상품 정보가 수정되었습니다.`);
+    const price = parseInt(priceInput || String(item.price));
+    const stock = parseInt(stockInput || String(item.stock));
+    const name = nameInput?.trim() || item.name;
+
+    const { error } = await supabase
+      .from('shop_items')
+      .update({ name, price, stock })
+      .eq('id', item.id);
+
+    if (!error) {
+      await loadShopItems();
+      if (loadData) await loadData();
+      if (showAlert) showAlert(`✅ [${name}] 상품 정보가 수정되었습니다.`);
+    } else {
+      if (showAlert) showAlert('❌ 수정 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 상품 삭제
+  const handleDeleteShopItem = async (id: number) => {
+    if (!supabase) return;
+    if (!confirm('정말 이 상품을 상점에서 완전히 삭제하시겠습니까?')) return;
+
+    const { error } = await supabase
+      .from('shop_items')
+      .delete()
+      .eq('id', id);
+
+    if (!error) {
+      await loadShopItems();
+      if (loadData) await loadData();
+      if (showAlert) showAlert('🗑️ 상품이 삭제되었습니다.');
+    } else {
+      if (showAlert) showAlert('❌ 삭제 중 오류가 발생했습니다.');
+    }
   };
 
   const handleTogglePromo = async (item: any) => {
