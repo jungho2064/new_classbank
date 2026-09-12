@@ -5,6 +5,7 @@ import {
   Users, Award, DollarSign, Landmark, Building, 
   Store, QrCode, TrendingUp, FileText, Settings, LogOut, Check, X, RefreshCw, Plus, Trash2, Edit2, Search
 } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function AdminPanel({ 
   supabase, 
@@ -82,6 +83,89 @@ export default function AdminPanel({
 
   // QR 검증
   const [serialInput, setSerialInput] = useState('');
+  // QR 카메라 스캐너 상태 및 미리보기 타깃 상태
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedItem, setScannedItem] = useState<any>(null); // 확인 대기 중인 쿠폰 정보
+
+  // 1) QR 스캔 성공 또는 시리얼 조회 시 정보 로드 (차감 전 조회 단계)
+  const handleLookupSerial = async (targetSerial: string) => {
+    if (!supabase || !targetSerial) return;
+    const cleanSerial = targetSerial.trim().toUpperCase();
+
+    const { data: inv, error } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('serial', cleanSerial)
+      .single();
+
+    if (error || !inv) {
+      if (showAlert) showAlert('❌ 등록되지 않은 QR/시리얼 번호입니다.');
+      setScannedItem(null);
+      return;
+    }
+
+    if (inv.status === 'Used') {
+      if (showAlert) showAlert('⚠️ 이미 모든 횟수를 소진하여 사용 완료된 쿠폰입니다.');
+      setScannedItem(null);
+      return;
+    }
+
+    // 유효기간 만료 체크
+    if (inv.expire_at) {
+      const today = new Date().toISOString().split('T')[0];
+      if (inv.expire_at < today) {
+        if (showAlert) showAlert(`⛔ 유효기간 만료! (${inv.expire_at}까지 사용 가능했던 쿠폰입니다)`);
+        setScannedItem(null);
+        return;
+      }
+    }
+
+    // 유효한 쿠폰인 경우: 검토 카드로 띄우고 카메라는 중단
+    setScannedItem(inv);
+    setIsScanning(false);
+    if (showAlert) showAlert(`🔍 [${inv.name}] 대원의 쿠폰이 확인되었습니다. 아래 승인 버튼을 눌러주세요.`);
+  };
+
+  // QR 스캔 성공 시 자동 조회 실행
+  const onScanSuccess = (decodedText: string) => {
+    const cleanSerial = decodedText.trim().toUpperCase();
+    setSerialInput(cleanSerial);
+    handleLookupSerial(cleanSerial);
+  };
+
+  // 2) 관리자가 [사용 승인] 버튼을 직접 눌렀을 때 실행되는 실제 차감 함수
+  const handleConfirmDeduct = async () => {
+    if (!supabase || !scannedItem) return;
+
+    const currentRem = scannedItem.remaining_uses !== undefined && scannedItem.remaining_uses !== null 
+      ? Number(scannedItem.remaining_uses) 
+      : 1;
+    const total = scannedItem.total_uses || 1;
+
+    if (currentRem <= 1) {
+      // 마지막 1회 차감 -> 사용 완료
+      await supabase
+        .from('inventory')
+        .update({ remaining_uses: 0, status: 'Used' })
+        .eq('id', scannedItem.id);
+
+      if (showAlert) showAlert(`🎉 [${scannedItem.name}] 대원의 [${scannedItem.item_name}] 마지막 1회가 차감되어 사용 완료되었습니다!`);
+    } else {
+      // 다회권 -> 1회 차감
+      const nextRem = currentRem - 1;
+      await supabase
+        .from('inventory')
+        .update({ remaining_uses: nextRem })
+        .eq('id', scannedItem.id);
+
+      if (showAlert) showAlert(`✅ [${scannedItem.name}] 대원의 [${scannedItem.item_name}] 1회 사용 승인! (잔여: ${nextRem}/${total}회)`);
+    }
+
+    // 상태 초기화 및 데이터 갱신
+    setScannedItem(null);
+    setSerialInput('');
+    if (loadData) await loadData();
+  };
 
   // 펀드
   const [fundNews, setFundNews] = useState('');
@@ -1397,29 +1481,85 @@ export default function AdminPanel({
         {/* 9. QR검증 */}
         {adminTab === 'qr' && (
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <div>
-              <h3 className="font-bold text-sm text-indigo-400">🔍 학생 쿠폰 시리얼 코드 검증기</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                학생의 가방 쿠폰 시리얼 번호(SN-XXXXXX)를 입력해 사용을 승인합니다. 
-                다회권은 1회씩 차감되며 유효기간 초과 시 자동으로 사용이 거절됩니다.
-              </p>
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-sm text-indigo-400">🔍 학생 쿠폰 QR / 시리얼 검증기</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  QR을 비추거나 시리얼을 입력해 쿠폰을 조회한 뒤, 승인 버튼을 눌러 1회를 차감합니다.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsScanning(!isScanning)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  isScanning 
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white' 
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                }`}
+              >
+                {isScanning ? '⏹️ 카메라 끄기' : '📷 QR 카메라 스캐너 켜기'}
+              </button>
             </div>
+
+            {/* 카메라 스캔 뷰파인더 */}
+            {isScanning && (
+              <div className="bg-black p-3 rounded-2xl border border-indigo-500/30 overflow-hidden">
+                <div id="qr-reader" className="w-full text-slate-900 rounded-xl overflow-hidden" />
+              </div>
+            )}
+
+            {/* 수동 시리얼 번호 입력 폼 */}
             <div className="flex gap-2">
               <input 
                 type="text" 
-                placeholder="SN-123456" 
+                placeholder="시리얼 직접 입력 (예: SN-123456)" 
                 value={serialInput} 
                 onChange={e => setSerialInput(e.target.value)} 
-                onKeyDown={e => { if (e.key === 'Enter') handleVerifySerial(); }}
-                className="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono font-bold uppercase outline-none focus:border-indigo-500" 
+                onKeyDown={e => { if (e.key === 'Enter') handleLookupSerial(serialInput); }}
+                className="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono font-bold uppercase outline-none focus:border-indigo-500 text-white" 
               />
               <button 
-                onClick={handleVerifySerial} 
-                className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 px-5 rounded-xl font-bold text-xs transition"
+                onClick={() => handleLookupSerial(serialInput)} 
+                className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 px-5 rounded-xl font-bold text-xs transition text-white"
               >
-                1회 사용 승인
+                쿠폰 조회
               </button>
             </div>
+
+            {/* 팝업 확인 카드: 조회 성공 시 노출 */}
+            {scannedItem && (
+              <div className="mt-4 p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-950/20 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[11px] font-mono text-emerald-400 font-bold tracking-wider">{scannedItem.serial}</span>
+                    <h4 className="text-base font-bold text-white mt-0.5">{scannedItem.item_name}</h4>
+                    <p className="text-xs text-slate-300 mt-1">소유 대원: <strong className="text-white">{scannedItem.name}</strong></p>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block px-2.5 py-1 bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold">
+                      잔여 {scannedItem.remaining_uses ?? 1} / {scannedItem.total_uses ?? 1}회
+                    </span>
+                    {scannedItem.expire_at && (
+                      <p className="text-[11px] text-slate-400 mt-1">만료일: {scannedItem.expire_at}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    onClick={handleConfirmDeduct}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition active:scale-95"
+                  >
+                    ✅ 사용 허용 (1회 차감)
+                  </button>
+                  <button
+                    onClick={() => setScannedItem(null)}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
