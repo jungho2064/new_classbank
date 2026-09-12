@@ -315,6 +315,22 @@ export default function App() {
       showAlert(`🎉 '${item.name}' 구매 완료! [가방]에서 확인하세요.`);
     });
   };
+  // 학생이 사용 완료된 쿠폰을 가방에서 직접 삭제하는 함수
+  const handleDeleteBagItem = async (itemId: number) => {
+    if (!confirm('사용한 쿠폰을 가방에서 정리(삭제)하시겠습니까?')) return;
+
+    const { error } = await supabase!
+      .from('inventory')
+      .delete()
+      .eq('id', itemId);
+
+    if (!error) {
+      await loadBag(currentUser?.name);
+      showAlert('🗑️ 쿠폰이 가방에서 정리되었습니다.');
+    } else {
+      showAlert('❌ 삭제 중 오류가 발생했습니다.');
+    }
+  };
 
   // 관리자 패널 렌더링
   if (loginMode === 'Admin') {
@@ -1056,12 +1072,80 @@ export default function App() {
         {activeTab === 'bag' && (
           <div className="space-y-3">
             <h2 className="font-bold text-indigo-400 text-sm">🎒 내 쿠폰 가방</h2>
-            {bagItems.length === 0 ? <div className="text-center py-6 text-xs text-slate-500">가방이 비어 있습니다.</div> : bagItems.map(b => (
-              <div key={b.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center text-xs">
-                <div><h3 className="font-bold">{b.item_name}</h3><p className="text-[10px] text-indigo-400">SN: {b.serial}</p></div>
-                <button onClick={() => setSelectedQr(b)} disabled={isProcessing} className="bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 font-bold active:scale-95 transition disabled:opacity-50">QR 보기</button>
-              </div>
-            ))}
+            {bagItems.length === 0 ? (
+              <div className="text-center py-6 text-xs text-slate-500">가방이 비어 있습니다.</div>
+            ) : (
+              bagItems.map(b => {
+                const isUsed = b.status === 'Used' || (b.remaining_uses !== undefined && b.remaining_uses <= 0);
+                const totalUses = b.total_uses || 1;
+                const remainingUses = b.remaining_uses !== undefined ? b.remaining_uses : 1;
+
+                const today = new Date().toISOString().split('T')[0];
+                const isExpired = b.expire_at && b.expire_at < today;
+
+                return (
+                  <div 
+                    key={b.id} 
+                    className={`bg-slate-900 border rounded-2xl p-4 flex justify-between items-center text-xs transition ${
+                      isUsed || isExpired 
+                        ? 'border-slate-800/50 opacity-60 bg-slate-950/40' 
+                        : 'border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* 횟수 뱃지 */}
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          isUsed 
+                            ? 'bg-slate-800 text-slate-500' 
+                            : remainingUses === 1 
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        }`}>
+                          {isUsed ? '소진 완료' : `잔여 ${remainingUses}/${totalUses}회`}
+                        </span>
+
+                        {/* 만료일 */}
+                        {b.expire_at && (
+                          <span className={`text-[10px] ${isExpired ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
+                            {isExpired ? '만료됨' : `~${b.expire_at}`}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 아이템 이름: 사용 완료 시 가로줄 */}
+                      <h3 className={`font-bold text-sm ${isUsed || isExpired ? 'line-through text-slate-500' : 'text-white'}`}>
+                        {b.item_name}
+                      </h3>
+                      <p className="text-[10px] text-indigo-400 font-mono">SN: {b.serial}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* 정상 사용 가능한 상태: QR 보기 버튼 */}
+                      {!isUsed && !isExpired ? (
+                        <button 
+                          onClick={() => setSelectedQr(b)} 
+                          disabled={isProcessing} 
+                          className="bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-700 font-bold active:scale-95 transition disabled:opacity-50 text-white"
+                        >
+                          QR 보기
+                        </button>
+                      ) : (
+                        /* 사용 완료 또는 만료된 상태: 휴지통 직접 삭제 버튼 */
+                        <button
+                          onClick={() => handleDeleteBagItem(b.id)}
+                          disabled={isProcessing}
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-950/30 border border-rose-800/40 text-rose-400 hover:bg-rose-900/50 transition active:scale-95 flex items-center gap-1 font-bold text-[11px]"
+                          title="사용한 쿠폰 정리"
+                        >
+                          🗑️ 비우기
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
       </main>
@@ -1069,9 +1153,28 @@ export default function App() {
       {selectedQr && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full text-center space-y-3">
-            <h3 className="font-bold text-sm">{selectedQr.item_name}</h3>
-            <div className="bg-white p-4 rounded-2xl inline-block"><QrCode size={90} className="text-black"/><p className="text-[11px] font-mono text-black font-bold mt-1">{selectedQr.serial}</p></div>
-            <button onClick={() => setSelectedQr(null)} className="w-full bg-slate-800 py-2 rounded-xl text-xs font-bold">닫기</button>
+            <div>
+              <h3 className="font-bold text-sm text-white">{selectedQr.item_name}</h3>
+              <p className="text-[11px] text-emerald-400 font-bold mt-0.5">
+                잔여 {selectedQr.remaining_uses ?? 1} / {selectedQr.total_uses ?? 1}회
+              </p>
+            </div>
+            
+            <div className="bg-white p-4 rounded-2xl inline-block">
+              <QrCode size={110} className="text-black" />
+              <p className="text-[11px] font-mono text-black font-bold mt-1.5">{selectedQr.serial}</p>
+            </div>
+
+            <p className="text-[10px] text-slate-400">
+              선생님/은행원에게 QR 또는 시리얼을 보여주세요.
+            </p>
+
+            <button 
+              onClick={() => setSelectedQr(null)} 
+              className="w-full bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-xs font-bold text-white transition"
+            >
+              닫기
+            </button>
           </div>
         </div>
       )}
