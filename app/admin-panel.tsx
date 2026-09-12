@@ -1620,76 +1620,75 @@ export default function AdminPanel({
 
         {/* 11. 시스템 제어 */}
         {adminTab === 'system' && (
-          {/* 🏦 은행원(출금 관리자) 지정 구역 */}
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3 mb-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-sm text-indigo-400">🏦 학급 은행원(출금 전담 대원) 임명</h3>
-                  {bankerName && (
-                    <span className="bg-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
-                      현재 은행원: {bankerName} 대원
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  은행원으로 지정된 대원은 본인 탭에서 친구들의 현금 출금 사전 신청을 직접 승인하거나 거절할 수 있습니다.
-                </p>
-                <div className="flex gap-2">
-                  <select
-                    value={bankerName}
-                    onChange={(e) => setBankerName(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs font-bold text-white outline-none focus:border-indigo-500"
-                  >
-                    <option value="">-- 은행원 미지정 (선생님만 승인) --</option>
-                    {safeUsers.filter((u: any) => u.status === 'Approved').map((u: any) => (
-                      <option key={u.id} value={u.name}>
-                        {u.name} ({u.job || '우주 시민'})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={async () => {
-                      // system_config 테이블에 banker_name 저장 (upsert)
-                      const { error } = await supabase.from('system_config').upsert(
-                        { key: 'banker_name', value: bankerName },
-                        { onConflict: 'key' }
-                      );
-                      if (!error) {
-                        if (showAlert) showAlert(`✅ 은행원이 '${bankerName || '미지정'}' 대원으로 설정되었습니다!`);
-                        if (loadData) await loadData();
-                      } else {
-                        if (showAlert) showAlert('❌ 은행원 설정 저장에 실패했습니다.');
-                      }
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 px-4 rounded-xl font-bold text-xs transition"
-                  >
-                    임명 저장
-                  </button>
-                </div>
+          <div className="space-y-4">
+            {/* 🏦 은행원(출금 관리자) 지정 구역 */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-sm text-indigo-400">🏦 학급 은행원(출금 전담 대원) 임명</h3>
+                {bankerName && (
+                  <span className="bg-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
+                    현재 은행원: {bankerName} 대원
+                  </span>
+                )}
               </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-bold text-sm text-indigo-400">⚙️ 학급 경제 특수 제어</h3>
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-              <div><p className="font-bold text-sm">❄️ 방학(경제 동결) 모드</p><p className="text-xs text-slate-400">송금, 상점, 예금 개설 동결</p></div>
-              <button onClick={async () => {
-                const next = isFrozen ? 'FALSE' : 'TRUE';
-                await supabase.from('system_config').upsert({ key: 'is_vacation', value: next }, { onConflict: 'key' });
-                if (loadData) await loadData();
-                if (showAlert) showAlert(isFrozen ? '방학 해제' : '방학 가동');
-              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${isFrozen ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{isFrozen ? '동결 ON' : '해제 OFF'}</button>
+              <p className="text-[11px] text-slate-400">
+                은행원으로 지정된 대원은 본인 탭에서 친구들의 현금 출금 사전 신청을 직접 승인하거나 거절할 수 있습니다.
+              </p>
+              <div className="flex gap-2">
+                <select
+                  value={bankerName}
+                  onChange={(e) => setBankerName(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs font-bold text-white outline-none focus:border-indigo-500"
+                >
+                  <option value="">-- 은행원 미지정 (선생님만 승인) --</option>
+                  {safeUsers.filter((u: any) => u.status === 'Approved').map((u: any) => (
+                    <option key={u.id} value={u.name}>
+                      {u.name} ({u.job || '우주 시민'})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from('system_config').upsert(
+                      { key: 'banker_name', value: bankerName },
+                      { onConflict: 'key' }
+                    );
+                    if (!error) {
+                      if (showAlert) showAlert(`✅ 은행원이 '${bankerName || '미지정'}' 대원으로 설정되었습니다!`);
+                      if (loadData) await loadData();
+                    } else {
+                      if (showAlert) showAlert('❌ 은행원 설정 저장에 실패했습니다.');
+                    }
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 px-4 rounded-xl font-bold text-xs transition"
+                >
+                  임명 저장
+                </button>
+              </div>
             </div>
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-              <div><p className="font-bold text-sm">🏦 정기예금 가입 창구</p><p className="text-xs text-slate-400">정기예금 신규 가입 허용 여부</p></div>
-              <button onClick={async () => {
-                const next = depositOpen ? 'FALSE' : 'TRUE';
-                await supabase.from('system_config').upsert({ key: 'deposit_open', value: next }, { onConflict: 'key' });
-                if (setDepositOpen) setDepositOpen(!depositOpen);
-                if (loadData) await loadData();
-                if (showAlert) showAlert(depositOpen ? '🔒 예금 창구가 닫혔습니다.' : '🟢 예금 창구가 열렸습니다.');
-              }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
+
+            {/* 학급 경제 특수 제어 */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="font-bold text-sm text-indigo-400">⚙️ 학급 경제 특수 제어</h3>
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                <div><p className="font-bold text-sm">❄️ 방학(경제 동결) 모드</p><p className="text-xs text-slate-400">송금, 상점, 예금 개설 동결</p></div>
+                <button onClick={async () => {
+                  const next = isFrozen ? 'FALSE' : 'TRUE';
+                  await supabase.from('system_config').upsert({ key: 'is_vacation', value: next }, { onConflict: 'key' });
+                  if (loadData) await loadData();
+                  if (showAlert) showAlert(isFrozen ? '방학 해제' : '방학 가동');
+                }} className={`px-4 py-2 rounded-xl text-xs font-bold ${isFrozen ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{isFrozen ? '동결 ON' : '해제 OFF'}</button>
+              </div>
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                <div><p className="font-bold text-sm">🏦 정기예금 가입 창구</p><p className="text-xs text-slate-400">정기예금 신규 가입 허용 여부</p></div>
+                <button onClick={async () => {
+                  const next = depositOpen ? 'FALSE' : 'TRUE';
+                  await supabase.from('system_config').upsert({ key: 'deposit_open', value: next }, { onConflict: 'key' });
+                  if (setDepositOpen) setDepositOpen(!depositOpen);
+                  if (loadData) await loadData();
+                  if (showAlert) showAlert(depositOpen ? '🔒 예금 창구가 닫혔습니다.' : '🟢 예금 창구가 열렸습니다.');
+                }} className={`px-4 py-2 rounded-xl text-xs font-bold ${depositOpen ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{depositOpen ? '창구 ON' : '창구 OFF'}</button>
+              </div>
             </div>
           </div>
         )}
-      </main>
-    </div>
-  );
-}
