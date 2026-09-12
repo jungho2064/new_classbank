@@ -5,7 +5,6 @@ import {
   Users, Award, DollarSign, Landmark, Building, 
   Store, QrCode, TrendingUp, FileText, Settings, LogOut, Check, X, RefreshCw, Plus, Trash2, Edit2, Search
 } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function AdminPanel({ 
   supabase, 
