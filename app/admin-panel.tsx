@@ -501,15 +501,6 @@ export default function AdminPanel({
     if (showAlert) showAlert(`🏷️ [${item.name}] 특가 세일 뱃지가 ${nextPromo ? 'ON' : 'OFF'} 되었습니다.`);
   };
 
-  const handleDeleteShopItem = async (id: number) => {
-    if (!supabase) return;
-    if (!confirm('정말 이 상품을 삭제하시겠습니까?')) return;
-    await supabase.from('shop_items').delete().eq('id', id);
-    await loadShopItems();
-    if (loadData) await loadData();
-    if (showAlert) showAlert('🗑️ 상품이 삭제되었습니다.');
-  };
-
   // QR/시리얼 검증 (다회용 차감 및 유효기간 만료 체크)
   const handleVerifySerial = async () => {
     if (!supabase || !serialInput.trim()) return;
