@@ -280,9 +280,35 @@ export default function App() {
 
     await runStudentTask(`🛒 [${item.name}] 구매 및 쿠폰 시리얼 발급 중...`, async () => {
       const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      
+      // ✅ 기존 6자리 숫자 난수 유지 (충분히 훌륭합니다)
       const serial = 'SN-' + Math.floor(100000 + Math.random() * 900000);
-      await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' }]);
-      await supabase!.from('inventory').insert([{ date: nowStr, name: currentUser?.name, item_id: item.item_id, item_name: item.name, serial, status: 'Unused', expiry: '2026-08-31' }]);
+
+      // ✅ 유효기간 계산 (구매일로부터 30일 뒤, 또는 원하는 날짜)
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + 30);
+      const expireAtStr = expDate.toISOString().split('T')[0];
+
+      // 기본 사용 횟수 (아이템에 지정된 횟수가 있으면 사용, 없으면 1회)
+      const uses = Number(item.total_uses || 1);
+
+      await supabase!.from('transactions').insert([
+        { date: nowStr, name: currentUser?.name, type: '상점 결제', amount: -item.price, note: `상품 구매: ${item.name}`, status: 'Success' }
+      ]);
+
+      // ✅ expire_at, total_uses, remaining_uses 반영
+      await supabase!.from('inventory').insert([{ 
+        date: nowStr, 
+        name: currentUser?.name, 
+        item_id: item.item_id, 
+        item_name: item.name, 
+        serial, 
+        status: 'Unused', 
+        total_uses: uses,
+        remaining_uses: uses,
+        expire_at: expireAtStr 
+      }]);
+
       await supabase!.from('shop_items').update({ stock: item.stock - 1 }).eq('item_id', item.item_id);
       await loadData();
       await loadBag(currentUser?.name);
