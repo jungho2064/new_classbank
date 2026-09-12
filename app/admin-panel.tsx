@@ -80,6 +80,7 @@ export default function AdminPanel({
   const [newItemPromo, setNewItemPromo] = useState(false);
   const [newItemDesc, setNewItemDesc] = useState('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [newItemTotalUses, setNewItemTotalUses] = useState('1'); // 기본 1회권
 
   // QR 검증
   const [serialInput, setSerialInput] = useState('');
@@ -524,9 +525,10 @@ export default function AdminPanel({
       max_per_user: parseInt(newItemMax || '1'),
       promotion: newItemPromo ? '특가' : '', 
       description: newItemDesc.trim(), 
+      total_uses: Number(newItemTotalUses || 1),
       status: 'Active'
     }]);
-    setNewItemName(''); setNewItemPrice(''); setNewItemDesc('');
+    setNewItemName(''); setNewItemPrice(''); setNewItemDesc(''); setNewItemTotalUses('1');
     await loadShopItems();
     if (loadData) await loadData();
     if (showAlert) showAlert('🛍️ 새 상품이 상점에 정상 등록되었습니다.');
@@ -1381,6 +1383,8 @@ export default function AdminPanel({
                 <input type="number" placeholder="가격 (안)" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
                 <input type="number" placeholder="재고 수량" value={newItemStock} onChange={e => setNewItemStock(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
                 <input type="text" placeholder="설명 (선택)" value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-white outline-none focus:border-indigo-500" />
+                <input type="number" min="1"placeholder="횟수 (기본 1회)"value={newItemTotalUses}onChange={e => setNewItemTotalUses(e.target.value)}className="w-full bg-slate-950 p-2.5 rounded-xl border border-indigo-500/50 text-xs text-indigo-300 font-bold outline-none focus:border-indigo-400"
+  />
               </div>
               <div className="flex justify-between items-center">
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
