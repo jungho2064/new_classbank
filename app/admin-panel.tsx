@@ -172,6 +172,15 @@ export default function AdminPanel({
       if (showAlert) showAlert(`✅ [${scannedItem.name}] 대원의 [${scannedItem.item_name}] 1회 사용 승인! (잔여: ${nextRem}/${total}회)`);
     }
 
+    // 학생 알림함에 사용 확인 전송
+    await supabase.from('notifications').insert([{
+      target_name: scannedItem.name,
+      title: '🎟️ 쿠폰 사용 승인 안내',
+      message: currentRem <= 1 
+        ? `[${scannedItem.item_name}] 쿠폰의 마지막 1회가 차감되어 사용 완료되었습니다.`
+        : `[${scannedItem.item_name}] 1회 사용이 승인되었습니다. (잔여: ${currentRem - 1}/${total}회)`,
+    }]);
+
     // 상태 초기화 및 데이터 갱신
     setScannedItem(null);
     setSerialInput('');

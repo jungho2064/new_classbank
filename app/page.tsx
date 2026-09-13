@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Wallet, Store, QrCode, TrendingUp, Settings, ShieldCheck, 
   ArrowRightLeft, Landmark, FileText, AlertTriangle, 
-  User, UserPlus, Receipt, LogOut, ChevronLeft, Loader2
+  User, UserPlus, Receipt, LogOut, ChevronLeft, Loader2, Bell
 } from 'lucide-react';
 import AdminPanel from './admin-panel';
 
@@ -58,6 +58,32 @@ export default function App() {
   const [newLoginPw, setNewLoginPw] = useState('');
 
   const [selectedQr, setSelectedQr] = useState<any>(null);
+  // 🔔 학생 알림함 상태
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotiModal, setShowNotiModal] = useState(false);
+
+  // 알림 목록 불러오기
+  const loadNotifications = async (userName: string) => {
+    if (!supabase || !userName) return;
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('target_name', userName)
+      .order('id', { ascending: false })
+      .limit(20);
+    if (data) setNotifications(data);
+  };
+
+  // 모든 알림 읽음 처리
+  const handleReadAllNoti = async () => {
+    if (!supabase || !currentUser?.name) return;
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('target_name', currentUser.name)
+      .eq('is_read', false);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
 
   // 알림 토스트 팝업 상태
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
@@ -210,6 +236,26 @@ export default function App() {
       ];
       if (fee > 0) rows.push({ date: nowStr, name: currentUser.name, type: '송금 수수료', amount: -fee, note: '타행 송금 수수료', status: 'Success' });
       await supabase!.from('transactions').insert(rows);
+      // 1. 받는 친구에게 앱 내 알림 전송
+      await supabase!.from('notifications').insert([{
+        target_name: transferTarget,
+        title: '💸 송금 도착!',
+        message: `${currentUser.name} 대원이 ${amt}안을 보냈습니다. (메모: ${currentUser.name} 입금)`,
+      }]);
+
+      // 2. 100안 이상의 고액 송금인 경우 선생님 디스코드 관제로 자동 알림
+      if (amt >= 100) {
+        sendDiscordNotice({
+          title: '🚨 고액 송금 모니터링',
+          description: `**${currentUser.name}** 대원이 **${transferTarget}** 대원에게 **${amt}안**을 송금했습니다.`,
+          color: 0xef4444, // 빨간색 경고
+          fields: [
+            { name: '보낸 대원', value: currentUser.name, inline: true },
+            { name: '받은 대원', value: transferTarget, inline: true },
+            { name: '금액', value: `${amt}안`, inline: true },
+          ]
+        });
+      }
       setTransferAmt(''); setTransferPw(''); setActiveTab('wallet');
       await loadData();
       showAlert(`💸 ${transferTarget} 대원에게 ${amt}안 송금 완료!`);
@@ -224,6 +270,16 @@ export default function App() {
     await runStudentTask('🏧 현금 출금 전표 발행 중...', async () => {
       const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
       await supabase!.from('transactions').insert([{ date: nowStr, name: currentUser?.name, type: '현금 출금', amount: -amt, note: '사전 신청', status: 'Pending_W' }]);
+      // 디스코드 관제 발송
+      sendDiscordNotice({
+        title: '🏧 현금 출금 사전 신청',
+        description: `**${currentUser?.name}** 대원이 현금 출금을 신청했습니다.`,
+        color: 0xf59e0b, // 주황색
+        fields: [
+          { name: '대원 이름', value: currentUser?.name || '미상', inline: true },
+          { name: '출금액', value: `${amt}안`, inline: true },
+        ]
+      });
       setWithdrawAmt(''); setWithdrawPw(''); setActiveTab('wallet');
       await loadData();
       showAlert('🏧 출금 신청 접수 완료!');
@@ -363,6 +419,31 @@ export default function App() {
       .subscribe((status) => {
         console.log('Realtime 구독 상태:', status);
       });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.name]);
+  // 🔔 실시간 알림 감지 (선생님 승인/송금 도착 시 즉시 갱신)
+  useEffect(() => {
+    if (!currentUser?.name || !supabase) return;
+    loadNotifications(currentUser.name);
+
+    const channel = supabase
+      .channel(`realtime-noti-${currentUser.name}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `target_name=eq.${currentUser.name}`,
+        },
+        () => {
+          loadNotifications(currentUser.name);
+        }
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -553,9 +634,31 @@ export default function App() {
       <header className="bg-gradient-to-b from-indigo-700 to-indigo-900 p-6 rounded-b-[2rem] shadow-xl">
         <div className="flex justify-between items-center mb-3">
           <span className="font-black text-xs text-indigo-200">SPACE CLASS BANK</span>
-          <button onClick={handleLogout} className="bg-black/30 p-1.5 rounded-full text-xs hover:bg-black/50 transition">
-            <LogOut size={14}/>
-          </button>
+          
+          {/* 우측 아이콘 묶음 (종 모양 + 로그아웃) */}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                setShowNotiModal(true);
+                handleReadAllNoti();
+              }} 
+              className="bg-black/30 p-1.5 rounded-full text-xs hover:bg-black/50 transition relative text-white"
+              title="알림함"
+            >
+              <Bell size={14} />
+              {/* 읽지 않은 알림이 있으면 빨간 점 표시 */}
+              {notifications.some(n => !n.is_read) && (
+                <>
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-rose-500 rounded-full animate-ping" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-rose-500 rounded-full" />
+                </>
+              )}
+            </button>
+
+            <button onClick={handleLogout} className="bg-black/30 p-1.5 rounded-full text-xs hover:bg-black/50 transition text-white">
+              <LogOut size={14}/>
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center flex-wrap gap-1.5">
@@ -1217,6 +1320,46 @@ export default function App() {
             <button 
               onClick={() => setSelectedQr(null)} 
               className="w-full bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-xs font-bold text-white transition"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+      {/* 🔔 알림 목록 모달 */}
+      {showNotiModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-xs w-full space-y-3">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-1.5">
+                <Bell size={16} /> 알림 센터
+              </h3>
+              <button onClick={() => setShowNotiModal(false)} className="text-slate-400 hover:text-white text-xs font-bold">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1 text-xs">
+              {notifications.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-[11px]">
+                  새로운 알림이 없습니다.
+                </div>
+              ) : (
+                notifications.map(n => (
+                  <div key={n.id} className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1">
+                    <p className="font-bold text-white text-[11px]">{n.title}</p>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">{n.message}</p>
+                    <p className="text-[9px] text-slate-600">
+                      {new Date(n.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button 
+              onClick={() => setShowNotiModal(false)}
+              className="w-full bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition"
             >
               닫기
             </button>
