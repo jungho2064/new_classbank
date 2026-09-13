@@ -8,6 +8,7 @@ import {
   User, UserPlus, Receipt, LogOut, ChevronLeft, Loader2, Bell
 } from 'lucide-react';
 import AdminPanel from './admin-panel';
+import { sendDiscordNotice } from './discord';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';

@@ -1,10 +1,8 @@
 // app/discord.ts
-const DISCORD_WEBHOOK_URL = process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL || '';
-
 interface DiscordNoticeParams {
   title: string;
   description: string;
-  color?: number; // 0x6366F1(파랑), 0x10B981(초록), 0xF59E0B(주황), 0xEF4444(빨강)
+  color?: number;
   fields?: { name: string; value: string; inline?: boolean }[];
 }
 
@@ -14,10 +12,16 @@ export const sendDiscordNotice = async ({
   color = 0x6366f1,
   fields = [],
 }: DiscordNoticeParams) => {
-  if (!DISCORD_WEBHOOK_URL) return;
+  // 💡 실행 시점에 주소를 동적으로 읽어옵니다.
+  const webhookUrl = process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL;
+
+  if (!webhookUrl) {
+    console.error('❌ [디스코드] NEXT_PUBLIC_DISCORD_WEBHOOK_URL 환경 변수가 비어 있습니다.');
+    return;
+  }
 
   try {
-    await fetch(DISCORD_WEBHOOK_URL, {
+    const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -35,7 +39,13 @@ export const sendDiscordNotice = async ({
         ],
       }),
     });
+
+    if (!res.ok) {
+      console.error('❌ [디스코드] 전송 실패 상태 코드:', res.status);
+    } else {
+      console.log('✅ [디스코드] 관제 알림 전송 성공!');
+    }
   } catch (error) {
-    console.error('디스코드 전송 실패:', error);
+    console.error('❌ [디스코드] 네트워크 오류:', error);
   }
 };
