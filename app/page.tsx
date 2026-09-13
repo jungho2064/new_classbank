@@ -137,8 +137,17 @@ export default function App() {
 
   const loadBag = async (userName: string) => {
     if (!supabase) return;
-    const { data } = await supabase.from('inventory').select('*').eq('name', userName).order('id', { ascending: false });
-    if (data) setBagItems(data);
+    const { data } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('name', userName)
+      .order('id', { ascending: false });
+
+    if (data) {
+      setBagItems(data);
+      // 💡 열려 있는 QR 모달 창의 잔여 횟수도 즉시 동기화
+      setSelectedQr((prev: any) => (prev ? (data.find((d: any) => d.id === prev.id) || null) : null));
+    }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -331,6 +340,34 @@ export default function App() {
       showAlert('❌ 삭제 중 오류가 발생했습니다.');
     }
   };
+  // 🔄 내 쿠폰 가방 실시간 동기화 (선생님이 차감/삭제 시 새로고침 없이 즉시 반영)
+  useEffect(() => {
+    if (!currentUser?.name || !supabase) return;
+
+    const channel = supabase
+      .channel(`realtime-bag-${currentUser.name}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE 모두 감지
+          schema: 'public',
+          table: 'inventory',
+        },
+        (payload: any) => {
+          const targetName = payload.new?.name || payload.old?.name;
+          if (!targetName || targetName === currentUser.name) {
+            loadBag(currentUser.name);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime 구독 상태:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.name]);
 
   // 관리자 패널 렌더링
   if (loginMode === 'Admin') {
