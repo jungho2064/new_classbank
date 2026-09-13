@@ -181,6 +181,21 @@ export default function AdminPanel({
         ? `[${scannedItem.item_name}] 쿠폰의 마지막 1회가 차감되어 사용 완료되었습니다.`
         : `[${scannedItem.item_name}] 1회 사용이 승인되었습니다. (잔여: ${currentRem - 1}/${total}회)`,
     }]);
+    // 2. 📢 선생님 디스코드 채널로 실시간 알림 발송 (👇 이 블록이 누락되었을 확률이 높습니다!)
+    await sendDiscordNotice({
+      title: '🎟️ 쿠폰 사용 승인',
+      description: `**${scannedItem.name}** 대원의 쿠폰이 승인 처리되었습니다.`,
+      color: 0x10b981, // 산뜻한 초록색
+      fields: [
+        { name: '대원 이름', value: scannedItem.name, inline: true },
+        { name: '아이템명', value: scannedItem.item_name, inline: true },
+        { 
+          name: '잔여 횟수', 
+          value: currentRem <= 1 ? '모두 소진 (사용 완료)' : `${currentRem - 1} / ${total}회 남음`, 
+          inline: false 
+        },
+      ],
+    });
 
     // 상태 초기화 및 데이터 갱신
     setScannedItem(null);
