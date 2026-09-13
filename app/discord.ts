@@ -1,5 +1,5 @@
 // app/discord.ts
-const DISCORD_WEBHOOK_URL = process.env.https://discord.com/api/webhooks/1548592385259339798/zGdLYW9gnIssdVUijKM9_9BQXY2C0Hr2DhOtG3B8YfdFceWA9Pe5ElHvk95t19aujYG4RD_WEBHOOK_URL || '';
+const DISCORD_WEBHOOK_URL = process.env.NEXT_PUBLIC_DISCORD_WEBHOOK_URL || '';
 
 interface DiscordNoticeParams {
   title: string;
