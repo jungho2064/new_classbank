@@ -147,12 +147,21 @@ export default function AdminPanel({
 
   // 3) 관리자가 [사용 승인] 버튼을 직접 눌렀을 때 실행되는 실제 차감 함수
   const handleConfirmDeduct = async () => {
-    if (!supabase || !scannedItem) return;
+    if (!supabase || !scannedItem) {
+      console.warn('⚠️ scannedItem 데이터가 없거나 supabase 객체가 없습니다.', scannedItem);
+      return;
+    }
+
+    console.log('🔍 [쿠폰 차감 시작] scannedItem 전체 데이터:', scannedItem);
 
     const currentRem = scannedItem.remaining_uses !== undefined && scannedItem.remaining_uses !== null 
       ? Number(scannedItem.remaining_uses) 
       : 1;
-    const total = scannedItem.total_uses || 1;
+    const total = Number(scannedItem.total_uses || 1);
+
+    // 컬럼명 안전 처리 (DB에 따라 name/user_name, item_name/name 등 다를 수 있으므로 방어)
+    const studentName = String(scannedItem.name || scannedItem.user_name || '미상 대원');
+    const couponName = String(scannedItem.item_name || scannedItem.title || '쿠폰');
 
     if (currentRem <= 1) {
       // 마지막 1회 차감 -> 사용 완료
@@ -161,7 +170,7 @@ export default function AdminPanel({
         .update({ remaining_uses: 0, status: 'Used' })
         .eq('id', scannedItem.id);
 
-      if (showAlert) showAlert(`🎉 [${scannedItem.name}] 대원의 [${scannedItem.item_name}] 마지막 1회가 차감되어 사용 완료되었습니다!`);
+      if (showAlert) showAlert(`🎉 [${studentName}] 대원의 [${couponName}] 마지막 1회가 차감되어 사용 완료되었습니다!`);
     } else {
       // 다회권 -> 1회 차감
       const nextRem = currentRem - 1;
@@ -170,32 +179,43 @@ export default function AdminPanel({
         .update({ remaining_uses: nextRem })
         .eq('id', scannedItem.id);
 
-      if (showAlert) showAlert(`✅ [${scannedItem.name}] 대원의 [${scannedItem.item_name}] 1회 사용 승인! (잔여: ${nextRem}/${total}회)`);
+      if (showAlert) showAlert(`✅ [${studentName}] 대원의 [${couponName}] 1회 사용 승인! (잔여: ${nextRem}/${total}회)`);
     }
 
-    // 학생 알림함에 사용 확인 전송
-    await supabase.from('notifications').insert([{
-      target_name: scannedItem.name,
-      title: '🎟️ 쿠폰 사용 승인 안내',
-      message: currentRem <= 1 
-        ? `[${scannedItem.item_name}] 쿠폰의 마지막 1회가 차감되어 사용 완료되었습니다.`
-        : `[${scannedItem.item_name}] 1회 사용이 승인되었습니다. (잔여: ${currentRem - 1}/${total}회)`,
-    }]);
-    // 2. 📢 선생님 디스코드 채널로 실시간 알림 발송 (👇 이 블록이 누락되었을 확률이 높습니다!)
-    await sendDiscordNotice({
-      title: '🎟️ 쿠폰 사용 승인',
-      description: `**${scannedItem.name}** 대원의 쿠폰이 승인 처리되었습니다.`,
-      color: 0x10b981, // 산뜻한 초록색
-      fields: [
-        { name: '대원 이름', value: scannedItem.name, inline: true },
-        { name: '아이템명', value: scannedItem.item_name, inline: true },
-        { 
-          name: '잔여 횟수', 
-          value: currentRem <= 1 ? '모두 소진 (사용 완료)' : `${currentRem - 1} / ${total}회 남음`, 
-          inline: false 
-        },
-      ],
-    });
+    // 1. 학생 알림함에 사용 확인 전송
+    try {
+      await supabase.from('notifications').insert([{
+        target_name: studentName,
+        title: '🎟️ 쿠폰 사용 승인 안내',
+        message: currentRem <= 1 
+          ? `[${couponName}] 쿠폰의 마지막 1회가 차감되어 사용 완료되었습니다.`
+          : `[${couponName}] 1회 사용이 승인되었습니다. (잔여: ${currentRem - 1}/${total}회)`,
+      }]);
+    } catch (e) {
+      console.error('학생 알림함 insert 실패:', e);
+    }
+
+    // 2. 📢 선생님 디스코드 채널로 실시간 알림 발송 (안전 장치 적용)
+    try {
+      console.log('📡 디스코드 쿠폰 차감 웹훅 발송 시도 중...');
+      await sendDiscordNotice({
+        title: '🎟️ 쿠폰 사용 승인',
+        description: `**${studentName}** 대원의 쿠폰이 승인 처리되었습니다.`,
+        color: 0x10b981,
+        fields: [
+          { name: '대원 이름', value: studentName, inline: true },
+          { name: '아이템명', value: couponName, inline: true },
+          { 
+            name: '잔여 횟수', 
+            value: currentRem <= 1 ? '모두 소진 (사용 완료)' : `${currentRem - 1} / ${total}회 남음`, 
+            inline: false 
+          },
+        ],
+      });
+      console.log('✅ 디스코드 웹훅 발송 함수 완료');
+    } catch (err) {
+      console.error('❌ 디스코드 웹훅 발송 에러:', err);
+    }
 
     // 상태 초기화 및 데이터 갱신
     setScannedItem(null);
