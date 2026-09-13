@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, Award, DollarSign, Landmark, Building, 
   Store, QrCode, TrendingUp, FileText, Settings, LogOut, Check, X, RefreshCw, Plus, Trash2, Edit2, Search
@@ -83,9 +83,9 @@ export default function AdminPanel({
 
   // QR 검증
   const [serialInput, setSerialInput] = useState('');
-  // QR 카메라 스캐너 상태 및 미리보기 타깃 상태
   const [isScanning, setIsScanning] = useState(false);
   const [scannedItem, setScannedItem] = useState<any>(null); // 확인 대기 중인 쿠폰 정보
+  const scannerRef = useRef<any>(null); // 카메라 인스턴스 보관용 Ref
 
   // 1) QR 스캔 성공 또는 시리얼 조회 시 정보 로드 (차감 전 조회 단계)
   const handleLookupSerial = async (targetSerial: string) => {
@@ -120,20 +120,31 @@ export default function AdminPanel({
       }
     }
 
-    // 유효한 쿠폰인 경우: 검토 카드로 띄우고 카메라는 중단
+    // 유효한 쿠폰인 경우 검토 카드로 띄움
     setScannedItem(inv);
-    setIsScanning(false);
     if (showAlert) showAlert(`🔍 [${inv.name}] 대원의 쿠폰이 확인되었습니다. 아래 승인 버튼을 눌러주세요.`);
   };
 
-  // QR 스캔 성공 시 자동 조회 실행
-  const onScanSuccess = (decodedText: string) => {
+  // 2) QR 스캔 성공 시 안전하게 카메라 종료 후 조회
+  const handleScanDone = async (decodedText: string) => {
     const cleanSerial = decodedText.trim().toUpperCase();
+
+    // 카메라를 먼저 정상 종료한 후 UI 정리
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+      } catch (e) {
+        console.warn('카메라 정지 중 무시할 수 있는 경고:', e);
+      }
+      scannerRef.current = null;
+    }
+
+    setIsScanning(false);
     setSerialInput(cleanSerial);
     handleLookupSerial(cleanSerial);
   };
 
-  // 2) 관리자가 [사용 승인] 버튼을 직접 눌렀을 때 실행되는 실제 차감 함수
+  // 3) 관리자가 [사용 승인] 버튼을 직접 눌렀을 때 실행되는 실제 차감 함수
   const handleConfirmDeduct = async () => {
     if (!supabase || !scannedItem) return;
 
@@ -166,45 +177,55 @@ export default function AdminPanel({
     setSerialInput('');
     if (loadData) await loadData();
   };
-  // 카메라 실제 구동 및 후면 카메라 강제 지정
+
+  // 4) 카메라 실제 구동 및 후면 카메라 연결
   useEffect(() => {
-    let html5QrCode: any = null;
+    if (!isScanning) return;
 
-    if (isScanning) {
-      setTimeout(async () => {
-        try {
-          const Html5Qrcode = (window as any).Html5Qrcode;
-          if (!Html5Qrcode) {
-            if (showAlert) showAlert('⚠️ QR 엔진 로딩 중입니다. 잠시 후 다시 시도해 주세요.');
-            return;
-          }
+    let isMounted = true;
 
-          html5QrCode = new Html5Qrcode('qr-reader');
-          
-          // 모바일 기기 후면 카메라(facingMode: "environment") 강제 지정
-          await html5QrCode.start(
-            { facingMode: 'environment' },
-            {
-              fps: 10,
-              qrbox: { width: 220, height: 220 }
-            },
-            (decodedText: string) => {
-              onScanSuccess(decodedText);
-              html5QrCode.stop().catch(() => {});
-            },
-            () => {} // 프레임 단위 미인식 에러 무시
-          );
-        } catch (err) {
-          console.error("Camera start failed", err);
-          if (showAlert) showAlert('📷 카메라 권한이 거부되었거나 지원하지 않는 브라우저입니다. Chrome 또는 Safari에서 실행해 주세요.');
+    const startCamera = async () => {
+      try {
+        const Html5Qrcode = (window as any).Html5Qrcode;
+        if (!Html5Qrcode) {
+          if (showAlert) showAlert('⚠️ QR 엔진 로딩 중입니다. 잠시 후 다시 시도해 주세요.');
           setIsScanning(false);
+          return;
         }
-      }, 300);
-    }
+
+        const html5QrCode = new Html5Qrcode('qr-reader');
+        scannerRef.current = html5QrCode;
+
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 },
+            aspectRatio: 1.0,
+          },
+          (decodedText: string) => {
+            if (isMounted) {
+              handleScanDone(decodedText);
+            }
+          },
+          () => {} // 프레임 단위 미인식 통과
+        );
+      } catch (err) {
+        console.error('카메라 시작 실패:', err);
+        if (showAlert) showAlert('📷 카메라 접근이 거부되었거나 지원하지 않는 환경입니다.');
+        setIsScanning(false);
+      }
+    };
+
+    const timer = setTimeout(startCamera, 200);
 
     return () => {
-      if (html5QrCode) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+      isMounted = false;
+      clearTimeout(timer);
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {}).finally(() => {
+          scannerRef.current = null;
+        });
       }
     };
   }, [isScanning]);
