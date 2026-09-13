@@ -166,6 +166,46 @@ export default function AdminPanel({
     setSerialInput('');
     if (loadData) await loadData();
   };
+  // 3) 카메라 실제 구동 및 정리 (CDN html5-qrcode 연동)
+  useEffect(() => {
+    let scanner: any = null;
+
+    if (isScanning) {
+      setTimeout(() => {
+        const Html5QrcodeScanner = (window as any).Html5QrcodeScanner;
+        if (!Html5QrcodeScanner) {
+          if (showAlert) showAlert('⚠️ QR 엔진을 불러오는 중입니다. 잠시 후 다시 켜주세요.');
+          return;
+        }
+
+        scanner = new Html5QrcodeScanner(
+          'qr-reader',
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 },
+            rememberLastUsedCamera: true,
+            aspectRatio: 1.0,
+          },
+          false
+        );
+
+        scanner.render(
+          (decodedText: string) => {
+            onScanSuccess(decodedText);
+          },
+          (error: any) => {
+            // 프레임 단위 미인식 에러는 무시
+          }
+        );
+      }, 300);
+    }
+
+    return () => {
+      if (scanner) {
+        scanner.clear().catch((err: any) => console.error(err));
+      }
+    };
+  }, [isScanning]);
 
   // 펀드
   const [fundNews, setFundNews] = useState('');
