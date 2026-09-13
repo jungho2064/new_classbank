@@ -166,43 +166,45 @@ export default function AdminPanel({
     setSerialInput('');
     if (loadData) await loadData();
   };
-  // 3) 카메라 실제 구동 및 정리 (CDN html5-qrcode 연동)
+  // 카메라 실제 구동 및 후면 카메라 강제 지정
   useEffect(() => {
-    let scanner: any = null;
+    let html5QrCode: any = null;
 
     if (isScanning) {
-      setTimeout(() => {
-        const Html5QrcodeScanner = (window as any).Html5QrcodeScanner;
-        if (!Html5QrcodeScanner) {
-          if (showAlert) showAlert('⚠️ QR 엔진을 불러오는 중입니다. 잠시 후 다시 켜주세요.');
-          return;
-        }
-
-        scanner = new Html5QrcodeScanner(
-          'qr-reader',
-          {
-            fps: 10,
-            qrbox: { width: 220, height: 220 },
-            rememberLastUsedCamera: true,
-            aspectRatio: 1.0,
-          },
-          false
-        );
-
-        scanner.render(
-          (decodedText: string) => {
-            onScanSuccess(decodedText);
-          },
-          (error: any) => {
-            // 프레임 단위 미인식 에러는 무시
+      setTimeout(async () => {
+        try {
+          const Html5Qrcode = (window as any).Html5Qrcode;
+          if (!Html5Qrcode) {
+            if (showAlert) showAlert('⚠️ QR 엔진 로딩 중입니다. 잠시 후 다시 시도해 주세요.');
+            return;
           }
-        );
+
+          html5QrCode = new Html5Qrcode('qr-reader');
+          
+          // 모바일 기기 후면 카메라(facingMode: "environment") 강제 지정
+          await html5QrCode.start(
+            { facingMode: 'environment' },
+            {
+              fps: 10,
+              qrbox: { width: 220, height: 220 }
+            },
+            (decodedText: string) => {
+              onScanSuccess(decodedText);
+              html5QrCode.stop().catch(() => {});
+            },
+            () => {} // 프레임 단위 미인식 에러 무시
+          );
+        } catch (err) {
+          console.error("Camera start failed", err);
+          if (showAlert) showAlert('📷 카메라 권한이 거부되었거나 지원하지 않는 브라우저입니다. Chrome 또는 Safari에서 실행해 주세요.');
+          setIsScanning(false);
+        }
       }, 300);
     }
 
     return () => {
-      if (scanner) {
-        scanner.clear().catch((err: any) => console.error(err));
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
       }
     };
   }, [isScanning]);

@@ -1160,9 +1160,17 @@ export default function App() {
               </p>
             </div>
             
-            <div className="bg-white p-4 rounded-2xl inline-block">
-              <QrCode size={110} className="text-black" />
-              <p className="text-[11px] font-mono text-black font-bold mt-1.5">{selectedQr.serial}</p>
+            {/* AS-IS: <QrCode size={110} ... /> 아이콘 컴포넌트 */}
+            {/* TO-BE: 표준 QR 코드 이미지로 교체 */}
+            <div className="bg-white p-3 rounded-2xl inline-block shadow-inner">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(selectedQr.serial)}`}
+                alt="QR Code"
+                className="w-36 h-36 mx-auto block"
+              />
+              <p className="text-xs font-mono text-slate-800 font-bold mt-2 tracking-wider">
+                {selectedQr.serial}
+              </p>
             </div>
 
             <p className="text-[10px] text-slate-400">
